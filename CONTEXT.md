@@ -1,0 +1,49 @@
+# CONTEXT
+
+Glossary for the DSH right-sidebar project.
+
+## Sidebar
+
+The user-facing panel docked to the **right** of the DeepSeek Harness web GUI,
+opposite the existing left session sidebar. It is a single owner of its region
+and hosts an ordered stack of Cards. The whole Sidebar collapses to a Rail and
+re-expands from it.
+
+## Rail
+
+The thin, always-visible strip pinned to the right edge of the GUI that the
+Sidebar collapses into. The Rail is the re-entry point: clicking it re-expands
+the Sidebar. The Rail never disappears, even when the Sidebar is closed.
+
+## Card
+
+One modular content unit inside the Sidebar (e.g. "Git Status", "Commit Graph").
+Cards are independent of one another: adding, removing, or hiding a Card must
+not affect other Cards. Cards are not collapsible — modularity is achieved by
+show/hide, not by folding.
+
+## Card Manifest
+
+The Sidebar's internal ordered list of Cards
+(`{ id, title, order, render }` entries). The single seam through which future
+Cards are added.
+
+## Sidebar Settings
+
+The affordance inside the Sidebar where the user toggles each Card visible or
+hidden. This is the mechanism that fulfills "modular cards" from the original
+request.
+
+## Details Column
+
+DSH shell's name for the built-in right column of the 3-column layout
+(left session sidebar / center conversation / right details). Today it is owned
+by the built-in tool-call output viewer — which in the current shipped GUI has no
+entry point and is never opened — so the Sidebar occupies it without displacing
+any reachable UI.
+
+## Working Repository
+
+The git repository a session's Cards operate on, defined as the current
+session's workspace root. When the workspace root is not a git repository,
+the Cards render a "not a git repository" empty state.
