@@ -66,6 +66,7 @@ return {
     const openStore = createStore(false)
     const fpStore = createStore('')
     const cwdStore = createStore('')
+    const cwdBySession = new Map()
 
     function relTime(ts) {
       try {
@@ -427,23 +428,24 @@ return {
     function SidebarPanel(props) {
       const [gearOpen, setGearOpen] = React.useState(false)
       const vis = useStore(visStore)
-      const cwd = props && props.useWorkspaces
+      const sessionId = props && props.useSessions
+        ? props.useSessions((s) => (s && s.current) || '')
+        : (props && props.sessionId) || ''
+      const resolvedCwd = props && props.useWorkspaces
         ? props.useWorkspaces((s) => {
             if (!s || !s.items) return ''
             for (const w of s.items) {
-              if (w.sessionIds && props.sessionId && w.sessionIds.indexOf(props.sessionId) !== -1) return w.path
+              if (w.sessionIds && sessionId && w.sessionIds.indexOf(sessionId) !== -1) return w.path
             }
             return ''
           })
         : ''
-      React.useEffect(() => {
-        openStore.set(true)
-        return () => { openStore.set(false) }
-      }, [])
-      React.useEffect(() => {
-        cwdStore.set(cwd || '')
-        fpStore.set('')
-      }, [cwd])
+      if (sessionId && resolvedCwd) cwdBySession.set(sessionId, resolvedCwd)
+      const effectiveCwd = sessionId ? (resolvedCwd || cwdBySession.get(sessionId) || '') : ''
+      // Child mount effects run before parent effects. Publish the cwd during
+      // render so Source Control's first refresh cannot fall back to home.
+      cwdStore.set(effectiveCwd)
+      React.useEffect(() => { fpStore.set('') }, [effectiveCwd])
       const cards = CARD_MANIFEST.filter((c) => vis[c.id] !== false).sort((a, b) => a.order - b.order)
       return h('div', { className: 'rsb-panel' },
         h('div', { className: 'rsb-header' },
@@ -463,22 +465,46 @@ return {
             h(c.render, null)))))
     }
 
-    function Rail() {
+    function Rail(props) {
       const open = useStore(openStore)
+      const startedSessionId = props && props.useSessions
+        ? props.useSessions((s) => {
+            const current = s && s.current
+            return current !== undefined && s.byId && s.byId[current] && s.byId[current].blank === false
+              ? current
+              : undefined
+          })
+        : (props && props.sessionId) || undefined
+      const startedSession = startedSessionId !== undefined
+      React.useEffect(() => {
+        if (!startedSession || !layout) return
+        if (open) layout.openDetails()
+        else layout.closeDetails()
+      }, [startedSessionId, open])
       if (!layout) return null
-      return h('button', {
+      const rail = h('button', {
         className: 'rsb-rail',
         title: open ? 'Collapse workspace sidebar' : 'Open workspace sidebar',
         onClick: () => {
-          if (open) { layout.closeDetails(); openStore.set(false) }
-          else { layout.openDetails(); openStore.set(true) }
+          if (open) {
+            if (startedSession) layout.closeDetails()
+            openStore.set(false)
+          } else {
+            if (startedSession) layout.openDetails()
+            openStore.set(true)
+          }
         },
       }, h('span', null, open ? '▶' : '◀'))
+      if (!open || startedSession) return rail
+      return h(React.Fragment, null,
+        h('aside', { className: 'rsb-overlay-panel' }, h(SidebarPanel, props)),
+        rail)
     }
 
     styles.insert([
       '.rsb-rail { position: fixed; top: 50%; right: 0; transform: translateY(-50%); z-index: 60; width: 22px; height: 72px; border: 1px solid var(--dsw-alias-border-l1); border-right: none; border-radius: 8px 0 0 8px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); cursor: pointer; pointer-events: auto; padding: 0; font-size: 11px; }',
       '.rsb-rail:hover { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }',
+      '.rsb-overlay-panel { position: fixed; top: 0; right: 0; bottom: 0; z-index: 59; width: 360px; max-width: calc(100vw - 22px); border-left: 1px solid var(--dsw-alias-border-l1); box-shadow: -8px 0 28px rgba(0,0,0,0.2); }',
       '.rsb-panel { position: relative; display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font-size: 12px; }',
       '.rsb-header { display: flex; align-items: center; gap: 4px; padding: 7px 10px; background: var(--dsw-specific-sidebar-fill); border-bottom: 1px solid var(--dsw-alias-border-l1); flex-shrink: 0; }',
       '.rsb-title { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--dsw-alias-label-secondary); }',
@@ -546,6 +572,6 @@ return {
     ].join('\n'))
 
     slots.inject('details', () => slots.register({ name: 'details', priority: -1 }, (props) => h(SidebarPanel, props)))
-    slots.inject('shell.overlay', () => slots.register({ name: 'shell.overlay', id: 'rside-rail', label: 'Workspace sidebar' }, () => h(Rail)))
+    slots.inject('shell.overlay', () => slots.register({ name: 'shell.overlay', id: 'rside-rail', label: 'Workspace sidebar' }, (props) => h(Rail, props)))
   },
 }
