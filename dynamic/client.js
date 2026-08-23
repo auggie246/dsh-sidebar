@@ -428,9 +428,9 @@ return {
     function SidebarPanel(props) {
       const [gearOpen, setGearOpen] = React.useState(false)
       const vis = useStore(visStore)
-      const sessionId = props && props.useSessions
-        ? props.useSessions((s) => (s && s.current) || '')
-        : (props && props.sessionId) || ''
+      // The details slot has session scope, so its framework-owned sessionId
+      // is the authority. Global current selection can be temporarily absent.
+      const sessionId = (props && props.sessionId) || ''
       const resolvedCwd = props && props.useWorkspaces
         ? props.useWorkspaces((s) => {
             if (!s || !s.items) return ''

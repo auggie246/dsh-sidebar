@@ -127,7 +127,7 @@ const workspacePath = '/workspace/project'
 const props = {
   sessionId: 'session-1',
   useSessions(selector) {
-    return selector({ current: 'session-1', byId: { 'session-1': { blank: false } } })
+    return selector({ current: undefined, byId: { 'session-1': { blank: false } } })
   },
   useWorkspaces(selector) {
     return selector({ items: [{ path: workspacePath, sessionIds: ['session-1'] }] })

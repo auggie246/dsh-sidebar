@@ -131,7 +131,9 @@ const stableProps = {
 }
 const transientProps = {
   ...stableProps,
-  sessionId: undefined,
+  useWorkspaces(selector) {
+    return selector({ items: [] })
+  },
 }
 
 let sidebarElement = renderFunction(details, stableProps)
@@ -146,9 +148,7 @@ assert.deepEqual(statusCwds, [workspacePath], 'a transient workspace miss must r
 
 const nextSessionProps = {
   ...transientProps,
-  useSessions(selector) {
-    return selector({ current: 'session-2', byId: { 'session-2': { blank: false } } })
-  },
+  sessionId: 'session-2',
 }
 sidebarElement = renderFunction(details, nextSessionProps)
 const nextSessionTree = renderFunction(sidebarElement.type, sidebarElement.props)
