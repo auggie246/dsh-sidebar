@@ -1,11 +1,11 @@
-# Example composition row for dsh-git-sidebar.
+# Example composition row for dsh-sidebar.
 #
 # Append this entry to your web profile's patch layer at
 #   $DSH_HOME/profiles/web/cordis.patch.yml   (usually ~/.dsh/profiles/web/cordis.patch.yml)
 # then restart `dsh web`.
 #
-# Remove it (and run `dsh plugin --profile web remove dsh-git-sidebar`) to uninstall.
+# Remove it (and run `dsh plugin --profile web remove dsh-sidebar`) to uninstall.
 
 - insert:
-    - id: git-sidebar
-      name: 'dsh-git-sidebar'
+    - id: sidebar
+      name: 'dsh-sidebar'

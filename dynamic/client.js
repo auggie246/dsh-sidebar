@@ -545,7 +545,7 @@ return {
       '.rsb-menu-item:hover { background: var(--dsw-alias-bg-layer-2); }',
     ].join('\n'))
 
-    slots.inject('details', () => slots.register({ name: 'details' }, (props) => h(SidebarPanel, props)))
+    slots.inject('details', () => slots.register({ name: 'details', priority: -1 }, (props) => h(SidebarPanel, props)))
     slots.inject('shell.overlay', () => slots.register({ name: 'shell.overlay', id: 'rside-rail', label: 'Workspace sidebar' }, () => h(Rail)))
   },
 }

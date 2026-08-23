@@ -9,6 +9,12 @@ opposite the existing left session sidebar. It is a single owner of its region
 and hosts an ordered stack of Cards. The whole Sidebar collapses to a Rail and
 re-expands from it.
 
+## Sidebar Package
+
+The `dsh-sidebar` plugin that owns the Sidebar and its Card Manifest. The
+package is not Git-specific: Git Status and Commit Graph are its initial Cards,
+and future Cards belong to this same Sidebar.
+
 ## Rail
 
 The thin, always-visible strip pinned to the right edge of the GUI that the

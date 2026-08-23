@@ -1,6 +1,6 @@
-# dsh-git-sidebar
+# dsh-sidebar
 
-A right-docked **git sidebar for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web** (`dsh web`), delivered as an out-of-tree DSH plugin.
+A right-docked, modular **Sidebar for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web** (`dsh web`), delivered as an out-of-tree DSH plugin. Git cards are its initial cards, not its boundary.
 
 ## Features
 
@@ -24,27 +24,30 @@ This is the standard out-of-tree DSH plugin path; it survives restarts.
 git clone https://github.com/YOUR-USER/dsh-sidebar.git
 cd dsh-sidebar
 
-# 2. Install it into the web profile (pnpm add under the hood)
+# 2. Install local peer dependencies (required for a source-link install)
+corepack pnpm install
+
+# 3. Install it into the web profile (pnpm add under the hood)
 dsh plugin --profile web add /path/to/dsh-sidebar
 ```
 
-3. Append the composition row from [`cordis.patch.example.yml`](cordis.patch.example.yml) to your profile patch layer:
+4. Append the composition row from [`cordis.patch.example.yml`](cordis.patch.example.yml) to your profile patch layer:
 
 ```yaml
 # ~/.dsh/profiles/web/cordis.patch.yml
 - insert:
-    - id: git-sidebar
-      name: 'dsh-git-sidebar'
+    - id: sidebar
+      name: 'dsh-sidebar'
 ```
 
-4. **Restart `dsh web`**, open any session, and click the `◀` rail on the right edge.
+5. **Restart `dsh web`**, open any session, and click the `◀` rail on the right edge.
 
 ### Uninstall
 
 Remove the `- insert:` block above from `cordis.patch.yml`, then:
 
 ```sh
-dsh plugin --profile web remove dsh-git-sidebar
+dsh plugin --profile web remove dsh-sidebar
 ```
 
 Restart `dsh web`.
@@ -56,7 +59,7 @@ running DSH process. It disappears when that process restarts. See
 [`dynamic/README.md`](dynamic/README.md); the short version: give your DSH
 agent this prompt —
 
-> Read `dynamic/dsh-git-sidebar.dynamic.json` from this repo. Call `cordis_define` with a new plugin, using its `name` and `description`, and its `host` and `client` strings as `code.host` and `code.client`. Then `cordis_run` the returned package; I'll approve the activation.
+> Read `dynamic/dsh-sidebar.dynamic.json` from this repo. Call `cordis_define` with a new plugin, using its `name` and `description`, and its `host` and `client` strings as `code.host` and `code.client`. Then `cordis_run` the returned package; I'll approve the activation.
 
 ## Usage
 
@@ -79,7 +82,7 @@ lib/            composition package (the permanent install)
   remote.js     Typert manifest + strict JSON codecs + gateway class
   client.js     browser half (window.__ModuleLoader__ wrapper)
 dynamic/        session-only install form (agent-defined dynamic plugin)
-  host.js, client.js, dsh-git-sidebar.dynamic.json (generated)
+  host.js, client.js, dsh-sidebar.dynamic.json (generated)
 scripts/        bundle-dynamic.mjs — regenerates the single-file bundle
 docs/           design notes; CONTEXT.md (root) — project glossary
 cordis.patch.example.yml — the composition row to copy into a profile

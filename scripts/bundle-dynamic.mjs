@@ -22,6 +22,6 @@ const bundle = {
   client,
 }
 
-const out = join(root, 'dynamic', 'dsh-git-sidebar.dynamic.json')
+const out = join(root, 'dynamic', 'dsh-sidebar.dynamic.json')
 await writeFile(out, JSON.stringify(bundle, null, 2) + '\n')
 console.log(`wrote ${out}`)
