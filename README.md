@@ -15,23 +15,54 @@ A right-docked, modular **Sidebar for [DeepSeek Harness](https://github.com/deep
 - A [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh) deployment (`@deepseek-ai/dsh` 0.1.0-rc.7 or compatible) with the **web profile** (`dsh web`).
 - `git` on the host running `dsh web`.
 
-## Install — option A: permanent plugin (recommended)
+# Install — permanent plugin (recommended)
 
-This is the standard out-of-tree DSH plugin path; it survives restarts.
+Two routes reach the same permanent install. The npm route is the shortest;
+the GitHub route tracks this repository directly. Both survive `dsh web`
+restarts.
+
+### Route 1 — from npm
 
 ```sh
-# 1. Get the package
-git clone https://github.com/YOUR-USER/dsh-sidebar.git
-cd dsh-sidebar
-
-# 2. Install local peer dependencies (required for a source-link install)
-corepack pnpm install
-
-# 3. Install it into the web profile (pnpm add under the hood)
-dsh plugin --profile web add /path/to/dsh-sidebar
+dsh plugin --profile web add dsh-sidebar
 ```
 
-4. Append the composition row from [`cordis.patch.example.yml`](cordis.patch.example.yml) to your profile patch layer:
+Nothing else in this section applies to the npm route: registry tarballs run
+no build scripts, so there is no allowlist step.
+
+### Route 2 — from GitHub
+
+```sh
+dsh plugin --profile web add git+https://github.com/auggie246/dsh-sidebar.git
+```
+
+`dsh plugin` forwards the spec to pnpm inside the web profile, so any pnpm git
+spec works — append `#main` or `#v0.1.0` to pin a branch or tag.
+
+#### The pnpm build-script allowlist (GitHub route only)
+
+A git-hosted package builds on install via its `prepare` script. pnpm blocks
+that script until you allow it. On the first add, the command fails with
+`ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED` and prints an `allowBuilds:` suggestion.
+Copy the key pnpm printed — it names this package plus the exact commit it
+fetched, so it looks like:
+
+```yaml
+# ~/.dsh/profiles/web/pnpm-workspace.yaml
+allowBuilds:
+  dsh-sidebar@git+https://github.com/auggie246/dsh-sidebar.git#<sha-pnpm-printed>: true
+```
+
+Re-run the identical add command. The `prepare` script regenerates the
+session-only bundle in `dynamic/`; `lib/` ships as plain source, so the build
+takes a second.
+
+For other users, there is genuinely nothing extra beyond those two steps!
+
+### Compose the Sidebar into the web profile (both routes)
+
+Append the composition row from [`cordis.patch.example.yml`](cordis.patch.example.yml)
+to your profile patch layer:
 
 ```yaml
 # ~/.dsh/profiles/web/cordis.patch.yml
@@ -40,7 +71,15 @@ dsh plugin --profile web add /path/to/dsh-sidebar
       name: 'dsh-sidebar'
 ```
 
-5. **Restart `dsh web`**, open any session, and click the `◀` rail on the right edge.
+Then **restart `dsh web`**, open any session, and click the `◀` rail on the
+right edge.
+
+### Config and credentials
+
+None required. The plugin holds no API keys, registers no DSH settings
+namespace, and stores card visibility per-browser under the localStorage key
+`dsh.rsidebar.cards.v1`. Fetch/pull/push use whatever git credentials your host
+already has for the workspace repository.
 
 ### Uninstall
 
@@ -50,7 +89,7 @@ Remove the `- insert:` block above from `cordis.patch.yml`, then:
 dsh plugin --profile web remove dsh-sidebar
 ```
 
-Restart `dsh web`.
+Restart `dsh web`. These steps are identical for both routes.
 
 ## Install — option B: session-only dynamic plugin (zero install)
 
