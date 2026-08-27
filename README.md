@@ -43,21 +43,22 @@ spec works — append `#main` or `#v0.1.0` to pin a branch or tag.
 
 A git-hosted package builds on install via its `prepare` script. pnpm blocks
 that script until you allow it. On the first add, the command fails with
-`ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED` and prints an `allowBuilds:` suggestion.
-Copy the key pnpm printed — it names this package plus the exact commit it
-fetched, so it looks like:
+`ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED` and prints one ready-made `allowBuilds`
+entry. Paste that printed line into your profile's `pnpm-workspace.yaml`
+verbatim — pnpm has already rewritten your spec into the tarball URL of the
+exact commit it fetched. This repository at commit `00df89c` produced:
 
 ```yaml
 # ~/.dsh/profiles/web/pnpm-workspace.yaml
 allowBuilds:
-  dsh-sidebar@git+https://github.com/auggie246/dsh-sidebar.git#<sha-pnpm-printed>: true
+  dsh-sidebar@https://codeload.github.com/auggie246/dsh-sidebar/tar.gz/00df89caf2b205ada8544a9b02402160a06c8669: true
 ```
 
-Re-run the identical add command. The `prepare` script regenerates the
-session-only bundle in `dynamic/`; `lib/` ships as plain source, so the build
-takes a second.
-
-For other users, there is genuinely nothing extra beyond those two steps!
+The hex suffix is the commit SHA and differs whenever you pin a branch or tag;
+always prefer a freshly printed line over an older one. Re-run the identical
+add command afterwards. The `prepare` script regenerates the session-only
+bundle in `dynamic/`; `lib/` ships as plain source, so the build takes a
+second.
 
 ### Compose the Sidebar into the web profile (both routes)
 
