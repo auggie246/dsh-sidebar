@@ -55,7 +55,7 @@ vm.runInNewContext(source, {
 const statusCwds = []
 const statusResult = {
   repo: false,
-  root: '/Users/example',
+  root: '/example/project',
   branch: '',
   detached: false,
   upstream: null,

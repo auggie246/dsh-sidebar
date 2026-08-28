@@ -123,7 +123,9 @@ lib/            composition package (the permanent install)
   client.js     browser half (window.__ModuleLoader__ wrapper)
 dynamic/        session-only install form (agent-defined dynamic plugin)
   host.js, client.js, dsh-sidebar.dynamic.json (generated)
-scripts/        bundle-dynamic.mjs — regenerates the single-file bundle
+scripts/        bundle-dynamic.mjs — regenerates the single-file bundle;
+                verify-*.mjs — install/live checks; the paths they assume are
+                overridable: DSH_WEB_PROFILE, DSH_SIDEBAR_SPEC, DSH_WEB_URL
 docs/           design notes; CONTEXT.md (root) — project glossary
 cordis.patch.example.yml — the composition row to copy into a profile
 ```

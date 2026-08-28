@@ -2,10 +2,14 @@
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const profileDir = process.env.DSH_WEB_PROFILE ?? join(homedir(), '.dsh', 'profiles', 'web');
+const workspaceRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const expectedSpecs = process.env.DSH_SIDEBAR_SPEC
+  ? [process.env.DSH_SIDEBAR_SPEC]
+  : [`file:${workspaceRoot}`, `link:${workspaceRoot}`];
 const packagePath = join(profileDir, 'package.json');
 const patchPath = join(profileDir, 'cordis.patch.yml');
 
@@ -18,8 +22,8 @@ try {
 }
 
 const sidebarDependency = profile?.dependencies?.['dsh-sidebar'];
-if (!['file:/Users/augustine/projects/dsh-sidebar', 'link:/Users/augustine/projects/dsh-sidebar'].includes(sidebarDependency)) {
-  failures.push('web profile does not depend on dsh-sidebar from this workspace');
+if (!expectedSpecs.includes(sidebarDependency)) {
+  failures.push(`web profile does not depend on dsh-sidebar from this workspace (expected one of: ${expectedSpecs.join(', ')})`);
 }
 
 let patch = '';

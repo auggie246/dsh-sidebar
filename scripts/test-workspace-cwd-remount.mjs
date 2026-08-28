@@ -62,7 +62,7 @@ const git = {
       ok: true,
       value: {
         repo: false,
-        root: cwd || '/Users/example',
+        root: cwd || '/example/project',
         branch: '',
         detached: false,
         upstream: null,
