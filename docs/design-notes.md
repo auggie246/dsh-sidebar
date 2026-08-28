@@ -14,6 +14,14 @@ Card Manifest, Sidebar Settings, Details Column, Working Repository).
 - **Always-on Rail via `shell.overlay`.** The layout owns whether the
   Details Column is open, so the re-entry point lives on the frame-wide
   overlay layer, pinned to the right edge.
+- **New sessions: reserved-width overlay.** The shell hard-zeros the Details
+  Column until the current session is started (`blank === false`), so before
+  the first message the Sidebar cannot dock. In that state the Sidebar floats
+  on the overlay layer while its stylesheet reserves the panel width inside
+  the shell frame's center column (`--rsb-panel-w`, shared by the panel width
+  and the reservation), so the conversation resizes instead of being covered.
+  The first message starts the session, and the Rail's layout effect docks the
+  Sidebar into the Details Column.
 - **Cards via an internal Card Manifest.** `{ id, title, order, render }`
   array in the client half; visibility toggles live behind the ⚙ gear menu
   and persist in `localStorage`. A cross-plugin card registry is a

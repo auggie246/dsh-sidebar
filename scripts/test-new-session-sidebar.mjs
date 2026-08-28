@@ -36,6 +36,7 @@ const React = {
 
 let plugin
 const layoutCalls = []
+const styleElements = []
 const context = {
   window: {
     __ModuleLoader__: {
@@ -47,7 +48,12 @@ const context = {
       },
     },
   },
-  document: undefined,
+  // The lib client inserts its stylesheet through ctx.effect; a minimal
+  // document stub lets that effect run so the test can inspect the CSS.
+  document: {
+    createElement() { return { textContent: '' } },
+    head: { appendChild(el) { styleElements.push(el) } },
+  },
   navigator: undefined,
   localStorage: undefined,
   console,
@@ -66,7 +72,7 @@ const layout = {
 const ctx = {
   get(name) { return name === 'layout' ? layout : undefined },
   remote: { $mount: async () => async () => {} },
-  effect() {},
+  effect(fn) { fn() },
   interval() { return () => {} },
   timeout() {},
   slots: {
@@ -78,6 +84,8 @@ const ctx = {
   },
 }
 plugin.apply(ctx)
+
+const stylesheet = styleElements.map((el) => el.textContent).join('\n')
 
 function renderFunction(type, props) {
   const previousComponent = activeComponent
@@ -123,6 +131,33 @@ assert.ok(rail, 'the Rail must render on the new session page')
 rail.props.onClick()
 
 tree = renderFunction(overlay, props)
-assert.ok(findClass(tree, 'rsb-panel'), 'clicking the Rail must render the Sidebar on the new session page')
-assert.deepEqual(layoutCalls, [], 'the blank session path must not use the shell Details Column')
+const panel = findClass(tree, 'rsb-overlay-panel')
+assert.ok(panel, 'clicking the Rail must render the Sidebar on the new session page')
+assert.ok(findClass(panel, 'rsb-panel'), 'the new-session Sidebar must render its panel content')
+assert.deepEqual(layoutCalls, [], 'the blank session path must not use the shell Details Column')// The floating panel must not simply cover the conversation: the stylesheet
+// has to reserve the panel's width inside the shell's center column.
+assert.match(
+  stylesheet,
+  /--rsb-panel-w:\s*min\(360px,\s*calc\(100vw - 22px\)\)/,
+  'the panel width must be one shared custom property',
+)
+assert.match(
+  stylesheet,
+  /\.rsb-overlay-panel \{[^}]*width: var\(--rsb-panel-w\)/,
+  'the floating panel must size itself from the shared custom property',
+)
+assert.match(
+  stylesheet,
+  /\[data-details-collapsed\]:has\(\[data-shell-overlay\] \.rsb-overlay-panel\) > div:nth-child\(2\)[^{]*\{[^}]*padding-right: var\(--rsb-panel-w\)/,
+  'the center column must reserve the panel width while the new-session Sidebar is open',
+)
+
+// Click the Rail of the open render — its closure holds open = true, so the
+// click collapses. The fake React never re-renders, so dropping the hook state
+// models the re-render React performs after the store notifies subscribers.
+const openRail = findClass(tree, 'rsb-rail')
+openRail.props.onClick()
+hookState.clear()
+tree = renderFunction(overlay, props)
+assert.equal(findClass(tree, 'rsb-overlay-panel'), null, 'clicking the Rail again must collapse the Sidebar')
 console.log('new-session Sidebar check passed')
