@@ -34,6 +34,22 @@ The Sidebar's internal ordered list of Cards
 (`{ id, title, order, render }` entries). The single seam through which future
 Cards are added.
 
+## Panel
+
+The user-facing region docked to the **bottom** of the center conversation
+column, modeled on the VS Code terminal panel. It holds an ordered strip of
+Panel Tabs and shows the active tab's content. The Panel is independent of
+the Sidebar: each has its own toggle, and both can be open at once. Its
+height is user-draggable and it closes fully, leaving no strip behind.
+
+## Panel Tab
+
+One closable, switchable content unit inside the Panel, modeled on VS Code
+editor tabs. Every Panel Tab has a type (e.g. interactive shell, browser
+preview, rendered preview). The user creates tabs with a "+" picker inside
+the Panel and closes each tab with its own control. Closing the last tab
+leaves the Panel open but empty.
+
 ## Sidebar Settings
 
 The affordance inside the Sidebar where the user toggles each Card visible or
