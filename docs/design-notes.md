@@ -5,7 +5,7 @@
 See [CONTEXT.md](../CONTEXT.md) for the glossary (Sidebar, Rail, Card,
 Card Manifest, Sidebar Settings, Details Column, Working Repository).
 
-## Key decisions (v0.1.0)
+## Key decisions
 
 - **Sidebar target: the DSH Web right Details Column.** The `details` shell
   slot is the only real right-hand grid column; in current builds its shipped

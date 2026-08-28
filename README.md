@@ -85,7 +85,7 @@ Then complete [steps 2 and 3 above](#2-add-it-to-your-web-profile).
 > [!NOTE]
 > A GitHub install runs this repository's build step. If pnpm reports `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`, copy the `allowBuilds` entry from its error message into `~/.dsh/profiles/web/pnpm-workspace.yaml`, then run the same install command again. The entry is specific to the Git commit pnpm downloaded.
 
-To pin a version, append `#main`, `#v0.1.0`, or a commit SHA to the Git URL.
+To pin a version, append `#main`, `#v0.2.0`, or a commit SHA to the Git URL.
 
 ## Configuration and privacy
 
