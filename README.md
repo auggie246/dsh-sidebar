@@ -1,147 +1,142 @@
 # dsh-sidebar
 
-A right-docked, modular **Sidebar for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web** (`dsh web`), delivered as an out-of-tree DSH plugin. Git cards are its initial cards, not its boundary.
+A Git sidebar for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web.
 
-## Features
+`dsh-sidebar` puts source control beside your DSH session: review changes, stage files, write commits, sync with a remote, and browse the commit graph without leaving the browser.
 
-- **Collapsible right sidebar** — docks into the right column of the DSH Web layout, collapses to an always-on rail (`◀`) pinned to the right edge; one click re-opens it.
-- **Modular cards** — content units contributed through an internal card manifest. Show/hide each card from the ⚙ gear menu; choices persist in the browser.
-- **Source Control card** (VS Code style) — branch with ahead/behind counts, staged/unstaged groups with per-file and stage-all controls, per-file discard (two-click confirm), commit box with ⌘/Ctrl+Enter, auto-stage-all commit when nothing is staged, fetch/pull/push, and a 3-second auto-refresh while visible.
-- **Commit Graph card** — real branch/merge lanes computed from commit parents, all refs (`--all`) with branch/tag/remote badges, infinite vertical scroll (100 commits per batch), and a right-click menu to copy the commit hash or message.
-- **Follows your session** — the cards operate on the active session's workspace repository; a clean "Not a git repository" state appears for non-repo workspaces.
+## What you get
+
+- A collapsible sidebar on the right side of DSH Web
+- Source control for the active session's workspace
+- Staged, unstaged, untracked, and conflicting-file views
+- Stage, unstage, discard, commit, fetch, pull, and push actions
+- A commit graph with branches, tags, remotes, merge lanes, and infinite scrolling
+- Per-browser controls for showing or hiding cards
+
+The sidebar uses the Git credentials already configured on the machine running `dsh web`. It does not need an API key or extra DSH settings.
 
 ## Requirements
 
-- A [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh) deployment (`@deepseek-ai/dsh` 0.1.0-rc.7 or compatible) with the **web profile** (`dsh web`).
-- `git` on the host running `dsh web`.
+- DeepSeek Harness with the Web profile (`dsh web`)
+- Node.js 20 or later
+- Git installed on the host that runs DSH Web
 
-# Install — permanent plugin (recommended)
+## Install
 
-Two routes reach the same permanent install. The npm route is the shortest;
-the GitHub route tracks this repository directly. Both survive `dsh web`
-restarts.
-
-### Route 1 — from npm
+### 1. Add the plugin
 
 ```sh
 dsh plugin --profile web add dsh-sidebar
 ```
 
-Nothing else in this section applies to the npm route: registry tarballs run
-no build scripts, so there is no allowlist step.
+### 2. Add it to your Web profile
 
-### Route 2 — from GitHub
-
-```sh
-dsh plugin --profile web add git+https://github.com/auggie246/dsh-sidebar.git
-```
-
-`dsh plugin` forwards the spec to pnpm inside the web profile, so any pnpm git
-spec works — append `#main` or `#v0.1.0` to pin a branch or tag.
-
-#### The pnpm build-script allowlist (GitHub route only)
-
-A git-hosted package builds on install via its `prepare` script. pnpm blocks
-that script until you allow it. On the first add, the command fails with
-`ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED` and prints one ready-made `allowBuilds`
-entry. Paste that printed line into your profile's `pnpm-workspace.yaml`
-verbatim — pnpm has already rewritten your spec into the tarball URL of the
-exact commit it fetched. This repository at commit `00df89c` produced:
+Open `~/.dsh/profiles/web/cordis.patch.yml` and add:
 
 ```yaml
-# ~/.dsh/profiles/web/pnpm-workspace.yaml
-allowBuilds:
-  dsh-sidebar@https://codeload.github.com/auggie246/dsh-sidebar/tar.gz/00df89caf2b205ada8544a9b02402160a06c8669: true
-```
-
-The hex suffix is the commit SHA and differs whenever you pin a branch or tag;
-always prefer a freshly printed line over an older one. Re-run the identical
-add command afterwards. The `prepare` script regenerates the session-only
-bundle in `dynamic/`; `lib/` ships as plain source, so the build takes a
-second.
-
-### Compose the Sidebar into the web profile (both routes)
-
-Append the composition row from [`cordis.patch.example.yml`](cordis.patch.example.yml)
-to your profile patch layer:
-
-```yaml
-# ~/.dsh/profiles/web/cordis.patch.yml
 - insert:
     - id: sidebar
       name: 'dsh-sidebar'
 ```
 
-Then **restart `dsh web`**, open any session, and click the `◀` rail on the
-right edge.
+You can also copy the same entry from [`cordis.patch.example.yml`](cordis.patch.example.yml).
 
-### Config and credentials
+### 3. Restart DSH Web
 
-None required. The plugin holds no API keys, registers no DSH settings
-namespace, and stores card visibility per-browser under the localStorage key
-`dsh.rsidebar.cards.v1`. Fetch/pull/push use whatever git credentials your host
-already has for the workspace repository.
+Restart `dsh web`, open a session, then select the arrow on the far right edge of the page to open the sidebar.
 
-### Uninstall
+That's it. The sidebar automatically follows the repository in the active session's workspace. If the workspace is not a Git repository, it shows a helpful empty state instead.
 
-Remove the `- insert:` block above from `cordis.patch.yml`, then:
+## Using the sidebar
+
+### Source Control
+
+Use the **Source Control** card to work with the current repository:
+
+- Select **+** or **−** beside a file or group to stage or unstage changes.
+- Select **discard** twice to confirm that you want to throw away a file's changes. Discarding an untracked file deletes it.
+- Enter a commit message and select **Commit**. Press <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd> to commit from the keyboard.
+- If no files are staged, committing stages all changes first—similar to VS Code's Source Control view.
+- Use the sync controls to fetch, pull, or push. Pull and push require an upstream branch.
+
+> [!WARNING]
+> **Discard permanently removes changes.** For an untracked file, it deletes the file. Check the file before confirming the second discard action.
+
+The card refreshes while it is visible, so branch and working-tree state stay current.
+
+### Commit Graph
+
+The **Commit Graph** card displays commits from every local and remote ref. Scroll to load older commits. Right-click a commit to copy its hash or message.
+
+### Customize the sidebar
+
+Select the gear icon in the sidebar header to show or hide cards. Your choice is saved in the browser, so it remains after reopening DSH Web.
+
+## Install from GitHub
+
+Use this option when you want to install directly from a branch, tag, or commit instead of the npm release:
 
 ```sh
-dsh plugin --profile web remove dsh-sidebar
+dsh plugin --profile web add git+https://github.com/auggie246/dsh-sidebar.git
 ```
 
-Restart `dsh web`. These steps are identical for both routes.
+Then complete [steps 2 and 3 above](#2-add-it-to-your-web-profile).
 
-## Install — option B: session-only dynamic plugin (zero install)
+> [!NOTE]
+> A GitHub install runs this repository's build step. If pnpm reports `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`, copy the `allowBuilds` entry from its error message into `~/.dsh/profiles/web/pnpm-workspace.yaml`, then run the same install command again. The entry is specific to the Git commit pnpm downloaded.
 
-No files touch your DSH deployment — an agent defines the plugin into the
-running DSH process. It disappears when that process restarts. See
-[`dynamic/README.md`](dynamic/README.md); the short version: give your DSH
-agent this prompt —
+To pin a version, append `#main`, `#v0.1.0`, or a commit SHA to the Git URL.
 
-> Read `dynamic/dsh-sidebar.dynamic.json` from this repo. Call `cordis_define` with a new plugin, using its `name` and `description`, and its `host` and `client` strings as `code.host` and `code.client`. Then `cordis_run` the returned package; I'll approve the activation.
+## Configuration and privacy
 
-## Usage
+There is nothing to configure. The plugin uses your existing Git credentials and configuration on the DSH Web host. Card visibility is stored only in this browser under `dsh.rsidebar.cards.v1`.
 
-| Control | Action |
-| --- | --- |
-| `◀` / `▶` rail | Open / collapse the sidebar |
-| ⚙ in the sidebar header | Show/hide cards (persisted in the browser) |
-| `+` / `−` on a file or group | Stage / unstage |
-| `↺` then `✓` on a file | Discard changes (untracked files are deleted) |
-| Commit button or ⌘/Ctrl+Enter | Commit; with nothing staged, stages everything first (VS Code behavior) |
-| `⟳` / `↓` / `↑` | Fetch / pull / push (pull & push need a configured upstream) |
-| Right-click a commit row | Copy commit hash or message |
-| Scroll the graph | Loads 100 more commits as you approach the end |
+## Try it for one session
+
+Want to try the sidebar without installing it permanently? The repository includes a dynamic plugin that an agent can load into the running DSH process. It disappears when DSH restarts. See [`dynamic/README.md`](dynamic/README.md) for the one-session setup prompt.
+
+## Troubleshooting
+
+- **The sidebar is missing:** confirm the composition entry is in the Web profile, restart `dsh web`, then open the arrow on the far right edge.
+- **“Not a git repository”:** open a session whose workspace is inside a Git repository.
+- **Fetch, pull, or push fails:** check that Git is installed and that the host has the required Git credentials. Pull and push also need an upstream branch.
+- **A commit fails:** make sure Git has a configured author identity and that your commit message is not empty.
+
+## Uninstall
+
+1. Remove the `dsh-sidebar` block from `~/.dsh/profiles/web/cordis.patch.yml`.
+2. Run:
+
+   ```sh
+   dsh plugin --profile web remove dsh-sidebar
+   ```
+
+3. Restart `dsh web`.
 
 ## Development
 
-```
-lib/            composition package (the permanent install)
-  index.js      host plugin: `rsidebarGit` Typert remote service (git ops)
-  remote.js     Typert manifest + strict JSON codecs + gateway class
-  client.js     browser half (window.__ModuleLoader__ wrapper)
-dynamic/        session-only install form (agent-defined dynamic plugin)
-  host.js, client.js, dsh-sidebar.dynamic.json (generated)
-scripts/        bundle-dynamic.mjs — regenerates the single-file bundle;
-                verify-*.mjs — install/live checks; the paths they assume are
-                overridable: DSH_WEB_PROFILE, DSH_SIDEBAR_SPEC, DSH_WEB_URL
-docs/           design notes; CONTEXT.md (root) — project glossary
-cordis.patch.example.yml — the composition row to copy into a profile
+```text
+lib/        Permanent plugin source
+dynamic/    One-session dynamic-plugin bundle
+scripts/    Bundling and verification scripts
+docs/       Design notes
 ```
 
-Both distribution forms share behavior; keep them in sync. After editing
-`dynamic/host.js` or `dynamic/client.js`, run `npm run bundle:dynamic` and
-commit the regenerated bundle. `npm test` syntax-checks the `lib/` files.
+After changing `dynamic/host.js` or `dynamic/client.js`, regenerate the bundle:
+
+```sh
+npm run bundle:dynamic
+```
+
+Run the checks with:
+
+```sh
+npm test
+```
 
 ## Limitations
 
-- Session-only installs (option B) vanish on DSH restart by design.
-- The sidebar takes over the shell's right Details Column; in current DSH
-  builds that column's shipped panel has no entry point, so nothing reachable
-  is displaced — but a future DSH that populates it will share the column
-  with this plugin on last-registration wins.
-- Graph rendering is a pragmatic lane layout, not a full GitLens clone.
+The sidebar occupies DSH Web's right Details Column. If another plugin also uses that column, the most recently registered plugin wins. The graph is designed for clear everyday history browsing, not as a full Git GUI replacement.
 
 ## License
 
