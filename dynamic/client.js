@@ -63,8 +63,66 @@ return {
       lsSet(VIS_KEY, JSON.stringify(cur))
     }
 
-    const openStore = createStore(false)
-    const panelOpenStore = createStore(false)
+    // ---------- layout persistence (ticket #4) ----------
+    // Sidebar open/closed, Panel open/closed, and Panel height persist in
+    // one JSON blob under dsh.rsidebar.panel.v1, following the
+    // card-visibility pattern above. Malformed or mistyped values fall
+    // back to the defaults; the height is re-clamped to the current
+    // viewport on every restore, so a height saved on a tall window
+    // cannot come back oversized.
+    const PANEL_KEY = 'dsh.rsidebar.panel.v1'
+    const DEFAULT_PANEL_H = 240
+    const PANEL_MIN_H = 120
+    const DEFAULT_PANEL_STATE = { sidebarOpen: false, panelOpen: false, panelHeight: DEFAULT_PANEL_H }
+    function readPanelState() {
+      const raw = lsGet(PANEL_KEY)
+      if (!raw) return DEFAULT_PANEL_STATE
+      try {
+        const p = JSON.parse(raw)
+        if (!p || typeof p !== 'object' || Array.isArray(p)) return DEFAULT_PANEL_STATE
+        return {
+          sidebarOpen: typeof p.sidebarOpen === 'boolean' ? p.sidebarOpen : false,
+          panelOpen: typeof p.panelOpen === 'boolean' ? p.panelOpen : false,
+          panelHeight: typeof p.panelHeight === 'number' && Number.isFinite(p.panelHeight) ? p.panelHeight : DEFAULT_PANEL_H,
+        }
+      } catch (e) { return DEFAULT_PANEL_STATE }
+    }
+    const initialPanelState = readPanelState()
+    const openStore = createStore(initialPanelState.sidebarOpen)
+    const panelOpenStore = createStore(initialPanelState.panelOpen)
+    const panelHeightStore = createStore(DEFAULT_PANEL_H)
+    function persistPanelState() {
+      lsSet(PANEL_KEY, JSON.stringify({
+        sidebarOpen: openStore.get() === true,
+        panelOpen: panelOpenStore.get() === true,
+        panelHeight: panelHeightStore.get(),
+      }))
+    }
+    function setSidebarOpen(v) { openStore.set(v === true); persistPanelState() }
+    function setPanelOpen(v) { panelOpenStore.set(v === true); persistPanelState() }
+    function viewportPanelMaxH() {
+      const vh = typeof window !== 'undefined' ? window.innerHeight : undefined
+      return typeof vh === 'number' && Number.isFinite(vh) && vh > 0 ? 0.6 * vh : Infinity
+    }
+    function clampPanelH(v) {
+      // A viewport shorter than 200px puts the 60% cap below the 120px
+      // floor; the floor wins so the Panel stays usable.
+      if (typeof v !== 'number' || !Number.isFinite(v)) return DEFAULT_PANEL_H
+      return Math.min(Math.max(Math.round(v), PANEL_MIN_H), Math.max(PANEL_MIN_H, viewportPanelMaxH()))
+    }
+    // The Panel and the center column's reservation share the
+    // --rsb-panel-h variable, so the drag handler applies the height by
+    // rewriting that one variable and both follow.
+    function applyPanelH(v) {
+      const height = clampPanelH(v)
+      panelHeightStore.set(height)
+      if (typeof document !== 'undefined' && document.documentElement && document.documentElement.style
+          && typeof document.documentElement.style.setProperty === 'function') {
+        document.documentElement.style.setProperty('--rsb-panel-h', height + 'px')
+      }
+      return height
+    }
+    applyPanelH(initialPanelState.panelHeight)
     const fpStore = createStore('')
     const cwdStore = createStore('')
     const cwdBySession = new Map()
@@ -475,6 +533,13 @@ return {
     // open/close, viewport changes) arrives as one ResizeObserver event.
     function BottomPanel() {
       const [rect, setRect] = React.useState(null)
+      // Drag state lives on an instance object (ticket #4): pointermove
+      // only records the pointer, and one rAF per frame applies the
+      // height, so a storm of pointer events costs one layout write per
+      // frame. With pointer capture the move/up events keep arriving on
+      // the handle after the pointer leaves the strip; losing capture
+      // ends the drag like a release would.
+      const [inst] = React.useState(() => ({ dragging: false, startY: 0, startH: 0, pendingY: null, raf: 0 }))
       React.useEffect(() => {
         if (typeof document === 'undefined') return () => {}
         const overlayEl = document.querySelector('[data-shell-overlay]')
@@ -490,12 +555,73 @@ return {
         observer.observe(center)
         return () => observer.disconnect()
       }, [])
+      function applyDrag() {
+        if (inst.pendingY === null) return
+        applyPanelH(inst.startH + (inst.startY - inst.pendingY))
+      }
+      function onDragStart(e) {
+        if (!e || typeof e.clientY !== 'number' || !Number.isFinite(e.clientY)) return
+        e.preventDefault()
+        inst.dragging = true
+        inst.startY = e.clientY
+        inst.startH = panelHeightStore.get()
+        inst.pendingY = null
+        if (e.pointerId !== undefined && e.currentTarget && typeof e.currentTarget.setPointerCapture === 'function') {
+          try { e.currentTarget.setPointerCapture(e.pointerId) } catch (err) {}
+        }
+      }
+      function onDragMove(e) {
+        if (!inst.dragging || !e || typeof e.clientY !== 'number' || !Number.isFinite(e.clientY)) return
+        inst.pendingY = e.clientY
+        if (inst.raf) return
+        const schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (fn) => { fn(); return 0 }
+        inst.raf = schedule(() => { inst.raf = 0; applyDrag() })
+      }
+      function onDragEnd(e) {
+        if (!inst.dragging) return
+        inst.dragging = false
+        if (inst.raf) {
+          if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(inst.raf)
+          inst.raf = 0
+        }
+        applyDrag()
+        inst.pendingY = null
+        if (e && e.pointerId !== undefined && e.currentTarget && typeof e.currentTarget.releasePointerCapture === 'function') {
+          try { e.currentTarget.releasePointerCapture(e.pointerId) } catch (err) {}
+        }
+        persistPanelState()
+      }
       if (!rect) return null
       return h('section', {
         className: 'rsb-bottom-panel',
         'aria-label': 'Panel',
         style: { left: rect.left + 'px', width: rect.width + 'px' },
-      })
+      },
+        h('div', {
+          className: 'rsb-panel-drag',
+          title: 'Drag to resize the panel',
+          'aria-label': 'Resize panel',
+          role: 'separator',
+          'aria-orientation': 'horizontal',
+          onPointerDown: onDragStart,
+          onPointerMove: onDragMove,
+          onPointerUp: onDragEnd,
+          onPointerCancel: onDragEnd,
+          onLostPointerCapture: onDragEnd,
+        }),
+        // Tab strip header (ticket #5). The + affordance is inert here on
+        // purpose: the tab picker lands in a later ticket, so the button
+        // stays disabled until it has something to open.
+        h('div', { className: 'rsb-tabstrip' },
+          h('button', {
+            className: 'rsb-tabstrip-add',
+            title: 'New panel tab',
+            'aria-label': 'New panel tab',
+            disabled: true,
+          }, '+')),
+        h('div', { className: 'rsb-panel-empty' },
+          h('div', { className: 'rsb-panel-empty-title' }, 'No tabs open.'),
+          h('div', { className: 'rsb-panel-empty-sub' }, 'Panel tabs will appear here.')))
     }
 
     function Rail(props) {
@@ -515,7 +641,10 @@ return {
         if (open) layout.openDetails()
         else layout.closeDetails()
       }, [startedSessionId, open])
-      const panel = panelOpen ? h(BottomPanel) : null
+      // The Panel exists only after the session has started (ticket #5):
+      // before that the region stays unmounted and its Rail button stays
+      // inert, matching the startedSession gate the Sidebar toggle uses.
+      const panel = panelOpen && startedSession ? h(BottomPanel) : null
       if (!layout) return panel
       // Two-button Rail bar in the VS Code layout style. The top button
       // toggles the Sidebar with the Rail's existing behavior; the second
@@ -524,6 +653,9 @@ return {
       // path so either region works with or without the other. Glyphs
       // draw with currentColor so they follow the theme. The container
       // carries no onClick: Rail space outside the buttons does nothing.
+      // The Panel button re-checks startedSession inside onClick: the
+      // disabled attribute gates the pointer path, the check gates every
+      // path a disabled attribute cannot cover.
       const rail = h('div', { className: 'rsb-rail' },
         h('button', {
           title: open ? 'Collapse workspace sidebar' : 'Open workspace sidebar',
@@ -531,10 +663,10 @@ return {
           onClick: () => {
             if (open) {
               if (startedSession) layout.closeDetails()
-              openStore.set(false)
+              setSidebarOpen(false)
             } else {
               if (startedSession) layout.openDetails()
-              openStore.set(true)
+              setSidebarOpen(true)
             }
           },
         },
@@ -542,10 +674,11 @@ return {
           h('rect', { x: '1.5', y: '2.5', width: '13', height: '11', rx: '1.5', fill: 'none', stroke: 'currentColor' }),
           h('rect', { x: '9', y: '4.5', width: '4', height: '7', fill: 'currentColor' }))),
         h('button', {
-          title: panelOpen ? 'Close panel' : 'Open panel',
-          'aria-label': panelOpen ? 'Close panel' : 'Open panel',
-          'aria-pressed': panelOpen ? 'true' : 'false',
-          onClick: () => panelOpenStore.set(!panelOpen),
+          title: !startedSession ? 'Panel opens once the session starts' : panelOpen ? 'Close panel' : 'Open panel',
+          'aria-label': !startedSession ? 'Panel opens once the session starts' : panelOpen ? 'Close panel' : 'Open panel',
+          'aria-pressed': startedSession && panelOpen ? 'true' : 'false',
+          disabled: startedSession ? undefined : true,
+          onClick: () => { if (startedSession) setPanelOpen(!panelOpen) },
         },
         h('svg', { width: 16, height: 16, viewBox: '0 0 16 16', 'aria-hidden': 'true' },
           h('rect', { x: '1.5', y: '2.5', width: '13', height: '11', rx: '1.5', fill: 'none', stroke: 'currentColor' }),
@@ -581,8 +714,24 @@ return {
       // the center column. While the Panel is mounted, that column's
       // bottom padding equals the Panel height, so no conversation content
       // is covered.
-      '.rsb-bottom-panel { position: fixed; bottom: 0; z-index: 58; box-sizing: border-box; height: var(--rsb-panel-h); border-top: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-base); box-shadow: 0 -8px 28px rgba(0,0,0,0.15); pointer-events: auto; }',
+      '.rsb-bottom-panel { position: fixed; bottom: 0; z-index: 58; box-sizing: border-box; display: flex; flex-direction: column; height: var(--rsb-panel-h); border-top: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-base); box-shadow: 0 -8px 28px rgba(0,0,0,0.15); pointer-events: auto; }',
       'div:has(> [data-shell-overlay] .rsb-bottom-panel) > div:nth-child(2) { padding-bottom: var(--rsb-panel-h); }',
+      // Top-edge drag handle (ticket #4): a thin full-width strip that
+      // overhangs the Panel border for a comfortable grab zone. The height
+      // itself lives in --rsb-panel-h, which the drag handler rewrites and
+      // the reservation rule above reads, so the Panel and the space
+      // reserved for it can never drift apart.
+      '.rsb-panel-drag { position: absolute; top: -3px; left: 0; right: 0; height: 6px; z-index: 2; cursor: row-resize; touch-action: none; }',
+      '.rsb-panel-drag:hover { background: var(--dsw-alias-border-l2); }',
+      // Tab strip header and empty state (ticket #5): the + affordance is
+      // disabled until the tab picker lands in a later ticket.
+      '.rsb-tabstrip { display: flex; align-items: center; gap: 4px; min-height: 30px; padding: 0 6px; background: var(--dsw-specific-sidebar-fill); border-bottom: 1px solid var(--dsw-alias-border-l1); flex-shrink: 0; }',
+      '.rsb-tabstrip-add { appearance: none; background: none; border: 1px solid transparent; border-radius: 4px; color: var(--dsw-alias-label-secondary); cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 7px; }',
+      '.rsb-tabstrip-add:hover:not(:disabled) { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }',
+      '.rsb-tabstrip-add:disabled { opacity: 0.5; cursor: default; }',
+      '.rsb-panel-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--dsw-alias-label-secondary); text-align: center; padding: 12px; }',
+      '.rsb-panel-empty-title { font-size: 12px; }',
+      '.rsb-panel-empty-sub { font-size: 10px; }',
       '.rsb-panel { position: relative; display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font-size: 12px; }',
       '.rsb-header { display: flex; align-items: center; gap: 4px; padding: 7px 10px; background: var(--dsw-specific-sidebar-fill); border-bottom: 1px solid var(--dsw-alias-border-l1); flex-shrink: 0; }',
       '.rsb-title { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--dsw-alias-label-secondary); }',
