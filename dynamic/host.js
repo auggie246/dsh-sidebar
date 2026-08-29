@@ -386,6 +386,47 @@ return {
       return { ok: true }
     })
 
+    harness.handle('readFile', async (args) => {
+      // File previews (ticket #7): serve one file from the Working
+      // Repository for the HTML/Markdown Panel Tabs, mirrored from the lib
+      // controller — same confinement, size cap, and shell usage.
+      try {
+  const rootRaw = cwdOf(args)
+    const root = rootRaw.length > 1 ? rootRaw.replace(/\/+$/, '') : '/'
+    const path = String(args && args.path == null ? '' : args.path).trim()
+    if (!path) throw new Error('no path given')
+    if (path.indexOf('\0') !== -1) throw new Error('path contains a NUL byte')
+    let rel = path
+    if (path[0] === '/') {
+      if (root === '/') rel = path.slice(1)
+      else if (path === root) rel = ''
+      else if (path.indexOf(root + '/') === 0) rel = path.slice(root.length + 1)
+      else throw new Error('path escapes the working repository')
+    }
+    const parts = []
+    for (const segment of rel.split('/')) {
+      if (segment === '' || segment === '.') continue
+      if (segment === '..') {
+        if (parts.length === 0) throw new Error('path escapes the working repository')
+        parts.pop()
+        continue
+      }
+      parts.push(segment)
+    }
+    const abs = parts.length ? root + '/' + parts.join('/') : root
+    // Size first, content second: the wc probe refuses an oversized file
+    // before its bytes ever cross the channel.
+    const sizeRes = await shell.run(shell.resolve({ command: 'wc -c < ' + shq(abs), timeoutMs: 15000 }))
+    if (sizeRes.exitCode !== 0) throw new Error(out(sizeRes.stderr).trim() || 'cannot read file')
+    const size = parseInt(out(sizeRes.stdout).trim(), 10)
+    if (Number.isFinite(size) && size > READ_FILE_LIMIT) throw new Error('file is larger than the 2 MB preview limit')
+    const catRes = await shell.run(shell.resolve({ command: 'cat -- ' + shq(abs), timeoutMs: 15000 }))
+    if (catRes.exitCode !== 0) throw new Error(out(catRes.stderr).trim() || 'cannot read file')
+    return { ok: true, content: out(catRes.stdout) }
+      } catch (e) {
+        return { ok: false, error: String((e && e.message) || e) }
+      }
+    })
     // seam(#7): add the readFile host handler directly above this line
     // seam(#8): add the ptyResize host handler directly above this line
   },
