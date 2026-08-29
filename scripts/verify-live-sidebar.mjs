@@ -8,15 +8,34 @@ if (!response.ok) {
   process.exit(1);
 }
 
-const bootMatch = html.match(/window\.__DSH_BOOT__\s*=\s*(\{.*?\})<\/script>/s);
-if (!bootMatch) {
+// The boot manifest is assigned either as `window.__DSH_BOOT__ = {...}` or as
+// `globalThis["__DSH_BOOT__"] = {...}` inside a script tag that may hold more
+// statements, so extract the JSON with a balanced-brace scan rather than a
+// regex bounded by </script>.
+const at = html.indexOf('__DSH_BOOT__');
+if (at === -1) {
   console.error('DSH Sidebar live check FAILED: DSH boot manifest was not found.');
+  process.exit(1);
+}
+const open = html.indexOf('{', at);
+let depth = 0;
+let end = -1;
+for (let i = open; i < html.length; i++) {
+  const ch = html[i];
+  if (ch === '{') depth++;
+  else if (ch === '}') {
+    depth--;
+    if (depth === 0) { end = i + 1; break; }
+  }
+}
+if (open === -1 || end === -1) {
+  console.error('DSH Sidebar live check FAILED: DSH boot manifest is not balanced JSON.');
   process.exit(1);
 }
 
 let boot;
 try {
-  boot = JSON.parse(bootMatch[1]);
+  boot = JSON.parse(html.slice(open, end));
 } catch (error) {
   console.error(`DSH Sidebar live check FAILED: boot manifest is invalid JSON: ${error.message}`);
   process.exit(1);
