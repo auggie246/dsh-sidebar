@@ -317,7 +317,7 @@ function openFileTab(env, itemLabel, path) {
   const next = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
   assert.ok(env.findClass(next, 'rsb-tab-picker'), 'clicking + must open the type picker')
   const items = env.findAll(next, 'rsb-tab-picker-item')
-  assert.equal(items.length, 3, 'the picker must list Localhost URL, HTML file and Markdown file')
+  assert.equal(items.length, 4, 'the picker must list Localhost URL, HTML file, Markdown file and Terminal')
   const labels = items.map((item) => {
     const strings = []
     env.collectStrings(item, strings)
@@ -326,6 +326,7 @@ function openFileTab(env, itemLabel, path) {
   assert.ok(labels[0].includes('Localhost URL'), 'Localhost URL stays the first picker item')
   assert.ok(labels[1].includes('HTML file') && labels[1].includes('Preview a repo file in an iframe'), 'the HTML file item must carry its title and sub')
   assert.ok(labels[2].includes('Markdown file') && labels[2].includes('Render a repo Markdown file'), 'the Markdown file item must carry its title and sub')
+  assert.ok(labels[3].includes('Terminal'), 'the Terminal item from ticket #8 stays last')
 }
 
 // 2. The HTML file flow: the form matches the URL form structure, submitting

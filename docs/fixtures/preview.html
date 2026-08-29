@@ -1,0 +1,19 @@
+<!doctype html>
+<!-- Fixture for scripts/verify-file-preview-tabs.mjs: the inline script must
+     run inside the sandboxed srcdoc iframe, proving allow-scripts holds for
+     HTML file previews. -->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>rsb-html-fixture</title>
+    <style>
+      body { font-family: sans-serif; }
+    </style>
+  </head>
+  <body>
+    <p>static-fixture-text</p>
+    <script>
+      document.body.setAttribute('data-rsb-marker', 'script-ran-marker')
+    </script>
+  </body>
+</html>

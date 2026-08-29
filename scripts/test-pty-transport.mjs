@@ -47,6 +47,7 @@ for (const [method, params, resultSymbol] of [
   ['ptyWrite', ['id', 'data'], 'dsh-sidebar/OkResult'],
   ['ptyPull', ['id', 'afterSeq'], 'dsh-sidebar/PtyPullResult'],
   ['ptyKill', ['id'], 'dsh-sidebar/OkResult'],
+  ['ptyResize', ['id', 'cols', 'rows'], 'dsh-sidebar/OkResult'],
 ]) {
   const inv = ptyInvocations.get(method)
   assert.ok(inv, `TYPERT manifest must contain the ${method} invocation`)
@@ -307,6 +308,20 @@ try {
   await pullUntil(beta.id, betaSeen.seq, 'beta-still-alive-10')
   await gateway.ptyKill(beta.id)
   console.log('concurrency check passed')
+
+  // ------------------------------------------------------------------
+  // 7. ptyResize propagates cols/rows to the kernel PTY (ticket #8):
+  //    the shell must observe the new size through stty.
+  // ------------------------------------------------------------------
+  const sized = await spawnPty(repoRoot, 80, 24)
+  // stty size prints at line start, so the needles anchor on the newline.
+  await gateway.ptyWrite(sized.id, 'stty size\n')
+  const beforeResize = await pullUntil(sized.id, 0, '\n24 80')
+  await gateway.ptyResize(sized.id, 120, 40)
+  await gateway.ptyWrite(sized.id, 'stty size\n')
+  await pullUntil(sized.id, beforeResize.seq, '\n40 120')
+  await gateway.ptyKill(sized.id)
+  console.log('ptyResize check passed (stty size 24 80 → 40 120)')
 } catch (error) {
   if (/posix_openpt|openpty|out of pty/i.test(String(error && error.message))) {
     console.error('test-pty-transport: PTY allocation was denied by the execution sandbox '

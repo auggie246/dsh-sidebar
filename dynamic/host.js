@@ -428,6 +428,27 @@ return {
       }
     })
     // seam(#7): add the readFile host handler directly above this line
+
+    // Ticket #8: keep the kernel PTY size in step with the rendered
+    // terminal surface. The DSH `LocalTerminalHandle` exposes no resize
+    // verb; `handle.terminal` is the underlying node-pty object (a plain
+    // class field). The reach is feature-detected and reports an error
+    // envelope otherwise; the client swallows resize failures.
+    harness.handle('ptyResize', async (args) => {
+      const id = args && args.id
+      const session = terminals.get(id)
+      if (!session) return { ok: false, error: 'unknown pty session: ' + id }
+      const terminal = session.handle.terminal
+      if (!terminal || typeof terminal.resize !== 'function') {
+        return { ok: false, error: 'pty resize is not supported by this DSH build' }
+      }
+      try {
+        terminal.resize(ptySize(args && args.cols, 'cols'), ptySize(args && args.rows, 'rows'))
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, error: String((e && e.message) || e) }
+      }
+    })
     // seam(#8): add the ptyResize host handler directly above this line
   },
 }
