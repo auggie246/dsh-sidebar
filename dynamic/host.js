@@ -415,8 +415,10 @@ return {
     }
     const abs = parts.length ? root + '/' + parts.join('/') : root
     // Size first, content second: the wc probe refuses an oversized file
-    // before its bytes ever cross the channel.
-    const sizeRes = await shell.run(shell.resolve({ command: 'wc -c < ' + shq(abs), timeoutMs: 15000 }))
+    // before its bytes ever cross the channel. The shell service spawns
+    // commands directly (no shell), so there is no redirection — wc prints
+    // "  <size> <path>" and parseInt reads the size field.
+    const sizeRes = await shell.run(shell.resolve({ command: 'wc -c ' + shq(abs), timeoutMs: 15000 }))
     if (sizeRes.exitCode !== 0) throw new Error(out(sizeRes.stderr).trim() || 'cannot read file')
     const size = parseInt(out(sizeRes.stdout).trim(), 10)
     if (Number.isFinite(size) && size > READ_FILE_LIMIT) throw new Error('file is larger than the 2 MB preview limit')

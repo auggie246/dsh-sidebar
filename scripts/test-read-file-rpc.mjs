@@ -75,12 +75,13 @@ function makeCtx(root) {
       resolve(req) { return { ...req, workdir: root } },
       async run(req) {
         const command = String((req && req.command) || '')
-        let m = /^wc -c < '(.*)'$/.exec(command)
+        let m = /^wc -c '(.*)'$/.exec(command)
         if (m) {
           const abs = unquote(m[1])
           try {
             const st = await fsStat(abs)
-            return { exitCode: 0, stdout: { text: String(st.size) + '\n' }, stderr: { text: '' } }
+            // wc pads its output; parseInt reads the size field.
+            return { exitCode: 0, stdout: { text: '  ' + String(st.size) + ' ' + abs + '\n' }, stderr: { text: '' } }
           } catch {
             return { exitCode: 1, stdout: { text: '' }, stderr: { text: 'wc: ' + abs + ': No such file or directory' } }
           }

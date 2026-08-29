@@ -222,6 +222,36 @@ async function main() {
     await waitFor(cdp, sessionId, `!!document.querySelector('[data-shell-overlay] .rsb-rail button')`, 'the Sidebar Rail to appear', 45000)
     console.log('GUI loaded; Rail found')
 
+    // A fresh verifier profile has no current session, so the Panel Rail
+    // button stays disabled. Start a session in this workspace through the
+    // GUI itself: the workspace-scoped New session button, one bootstrap
+    // message through the composer, then the session is running and the
+    // Rail's Panel button enables. The bootstrap session lives in the
+    // Working Repository, so file previews resolve repo-relative paths.
+    if (await evaluate(cdp, sessionId, `(() => { const b = document.querySelector('[data-shell-overlay] .rsb-rail button:nth-of-type(2)'); return !b || b.disabled })()`)) {
+      const clicked = await evaluate(cdp, sessionId, `(() => {
+        const b = document.querySelector('button[aria-label="New session in dsh-sidebar"]')
+          || Array.from(document.querySelectorAll('button')).find((e) => (e.getAttribute('aria-label') || '').startsWith('New session in '))
+          || Array.from(document.querySelectorAll('button')).find((e) => (e.textContent || '').trim() === 'New Session')
+        if (!b) return false
+        b.click()
+        return true
+      })()`)
+      if (!clicked) throw new Error('could not open a new session from the GUI')
+      await waitFor(cdp, sessionId, `!!document.querySelector('textarea[placeholder="Describe what you want to build"]')`, 'the composer to appear', 20000)
+      const filled = await evaluate(cdp, sessionId, `(() => {
+        const ta = document.querySelector('textarea[placeholder="Describe what you want to build"]')
+        if (!ta) return false
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+        setter.call(ta, 'Verifier bootstrap session — this session exists only so the dsh-sidebar GUI verifiers can drive a started session. Please ignore it.')
+        ta.dispatchEvent(new Event('input', { bubbles: true }))
+        return true
+      })()`)
+      if (!filled) throw new Error('could not fill the composer')
+      await evaluate(cdp, sessionId, `(() => { const b = Array.from(document.querySelectorAll('button')).find((e) => (e.getAttribute('aria-label') || '') === 'Send message'); if (!b) return false; b.click(); return true })()`)
+      await waitFor(cdp, sessionId, `(() => { const b = document.querySelector('[data-shell-overlay] .rsb-rail button:nth-of-type(2)'); return !!b && !b.disabled })()`, 'the bootstrap session to start (Rail button enabled)', 60000)
+      console.log('bootstrap session started; Rail Panel button enabled')
+    }
     const panelButton = `[data-shell-overlay] .rsb-rail button:nth-of-type(2)`
     const gate = await evaluate(cdp, sessionId, `(() => {
       const b = document.querySelector('${panelButton}')
@@ -257,22 +287,19 @@ async function main() {
     const sandbox = await evaluate(cdp, sessionId, `document.querySelector('.rsb-tabframe').getAttribute('sandbox') ?? ''`)
     if (!sandbox.includes('allow-scripts')) throw new Error(`the iframe sandbox does not allow scripts (${JSON.stringify(sandbox)})`)
     await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-tabframe')`, 'the iframe to stay mounted', 5000)
-    // The sandboxed iframe has an opaque origin, so find its execution
-    // context by frame id from the frame tree, not by origin string.
-    const tree = await cdp.send('Page.getFrameTree', {}, sessionId)
-    const findFrame = (node) => {
-      if (node.frame.url.startsWith(previewUrl)) return node.frame
-      for (const child of node.childFrames || []) {
-        const found = findFrame(child)
-        if (found) return found
-      }
-      return null
+    // The sandboxed preview loads as an out-of-process frame: it never shows
+    // in this page's Page.getFrameTree, so find it as its own CDP target and
+    // attach to it directly.
+    let frameSession = null
+    const frameDeadline = Date.now() + 10000
+    while (Date.now() < frameDeadline && !frameSession) {
+      const { targetInfos } = await cdp.send('Target.getTargets')
+      const t = targetInfos.find((t) => t.type === 'iframe' && t.url.startsWith(previewUrl))
+      if (t) frameSession = (await cdp.send('Target.attachToTarget', { targetId: t.targetId, flatten: true })).sessionId
+      else await sleep(250)
     }
-    const previewFrame = findFrame(tree.frameTree)
-    if (!previewFrame) throw new Error('the preview iframe never appeared in the frame tree')
-    const frameContext = [...contexts.values()].find((c) => c.auxData?.frameId === previewFrame.id)
-    if (!frameContext) throw new Error('the preview iframe never created an execution context')
-    const inner = await cdp.send('Runtime.evaluate', { expression: `document.body.textContent`, returnByValue: true, contextId: frameContext.id }, sessionId)
+    if (!frameSession) throw new Error('the preview iframe never appeared as a CDP target')
+    const inner = await cdp.send('Runtime.evaluate', { expression: `document.body.textContent`, returnByValue: true }, frameSession)
     if (inner.exceptionDetails || inner.result.value !== 'script-ran-marker') {
       throw new Error(`the preview script did not run in the iframe (got: ${JSON.stringify(inner.result?.value ?? inner.exceptionDetails?.exception?.description)})`)
     }

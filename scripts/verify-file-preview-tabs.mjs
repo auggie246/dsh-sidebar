@@ -21,6 +21,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const { spawn } = await import('node:child_process')
 const { mkdtemp, rm } = await import('node:fs/promises')
 const { tmpdir } = await import('node:os')
+const { join } = await import('node:path')
 
 // ---------- served-bundle markers (the GUI must advertise the new code) ----------
 async function bundleMarkers() {
@@ -147,28 +148,23 @@ async function openFileTab(cdp, sessionId, pickerTitle, path) {
   await waitFor(cdp, sessionId, `!document.querySelector('.rsb-tab-picker-form')`, `the ${pickerTitle} form to close`)
 }
 
-async function srcdocFrameValues(cdp, sessionId, contexts) {
-  // Both previews are sandboxed srcdoc frames at about:srcdoc; ask each frame's
-  // execution context what it holds instead of guessing by order.
-  const tree = await cdp.send('Page.getFrameTree', {}, sessionId)
-  const frames = []
-  const walk = (node) => {
-    if (node.frame.url === 'about:srcdoc') frames.push(node.frame)
-    for (const child of node.childFrames || []) walk(child)
-  }
-  walk(tree.frameTree)
+async function srcdocFrameValues(cdp) {
+  // Both previews are sandboxed srcdoc frames that load as out-of-process
+  // frames: they never appear in the parent's Page.getFrameTree, so find
+  // each about:srcdoc iframe target, attach to it, and ask it directly.
+  const { targetInfos } = await cdp.send('Target.getTargets')
+  const frames = targetInfos.filter((t) => t.type === 'iframe' && t.url === 'about:srcdoc')
   const values = []
   for (const frame of frames) {
-    const context = [...contexts.values()].find((c) => c.auxData?.frameId === frame.id)
-    if (!context) continue
+    const { sessionId: frameSession } = await cdp.send('Target.attachToTarget', { targetId: frame.targetId, flatten: true }).catch(() => ({ sessionId: null }))
+    if (!frameSession) continue
     const probe = await cdp.send('Runtime.evaluate', {
       expression: `({
         marker: document.body ? document.body.getAttribute('data-rsb-marker') : null,
         h1: document.querySelector('h1') ? document.querySelector('h1').textContent : null,
       })`,
       returnByValue: true,
-      contextId: context.id,
-    }, sessionId).catch(() => null)
+    }, frameSession).catch(() => null)
     if (probe && !probe.exceptionDetails) values.push(probe.result.value)
   }
   return values
@@ -229,6 +225,36 @@ async function main() {
     await waitFor(cdp, sessionId, `!!document.querySelector('[data-shell-overlay] .rsb-rail button')`, 'the Sidebar Rail to appear', 45000)
     console.log('GUI loaded; Rail found')
 
+    // A fresh verifier profile has no current session, so the Panel Rail
+    // button stays disabled. Start a session in this workspace through the
+    // GUI itself: the workspace-scoped New session button, one bootstrap
+    // message through the composer, then the session is running and the
+    // Rail's Panel button enables. The bootstrap session lives in the
+    // Working Repository, so file previews resolve repo-relative paths.
+    if (await evaluate(cdp, sessionId, `(() => { const b = document.querySelector('[data-shell-overlay] .rsb-rail button:nth-of-type(2)'); return !b || b.disabled })()`)) {
+      const clicked = await evaluate(cdp, sessionId, `(() => {
+        const b = document.querySelector('button[aria-label="New session in dsh-sidebar"]')
+          || Array.from(document.querySelectorAll('button')).find((e) => (e.getAttribute('aria-label') || '').startsWith('New session in '))
+          || Array.from(document.querySelectorAll('button')).find((e) => (e.textContent || '').trim() === 'New Session')
+        if (!b) return false
+        b.click()
+        return true
+      })()`)
+      if (!clicked) throw new Error('could not open a new session from the GUI')
+      await waitFor(cdp, sessionId, `!!document.querySelector('textarea[placeholder="Describe what you want to build"]')`, 'the composer to appear', 20000)
+      const filled = await evaluate(cdp, sessionId, `(() => {
+        const ta = document.querySelector('textarea[placeholder="Describe what you want to build"]')
+        if (!ta) return false
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+        setter.call(ta, 'Verifier bootstrap session — this session exists only so the dsh-sidebar GUI verifiers can drive a started session. Please ignore it.')
+        ta.dispatchEvent(new Event('input', { bubbles: true }))
+        return true
+      })()`)
+      if (!filled) throw new Error('could not fill the composer')
+      await evaluate(cdp, sessionId, `(() => { const b = Array.from(document.querySelectorAll('button')).find((e) => (e.getAttribute('aria-label') || '') === 'Send message'); if (!b) return false; b.click(); return true })()`)
+      await waitFor(cdp, sessionId, `(() => { const b = document.querySelector('[data-shell-overlay] .rsb-rail button:nth-of-type(2)'); return !!b && !b.disabled })()`, 'the bootstrap session to start (Rail button enabled)', 60000)
+      console.log('bootstrap session started; Rail Panel button enabled')
+    }
     const panelButton = `[data-shell-overlay] .rsb-rail button:nth-of-type(2)`
     const gate = await evaluate(cdp, sessionId, `(() => {
       const b = document.querySelector('${panelButton}')
@@ -259,7 +285,7 @@ async function main() {
     let frames = []
     const deadline = Date.now() + 8000
     while (Date.now() < deadline) {
-      frames = await srcdocFrameValues(cdp, sessionId, contexts)
+      frames = await srcdocFrameValues(cdp)
       if (frames.some((f) => f.marker === 'script-ran-marker')) break
       await sleep(300)
     }
@@ -274,7 +300,7 @@ async function main() {
     frames = []
     const mdDeadline = Date.now() + 8000
     while (Date.now() < mdDeadline) {
-      frames = await srcdocFrameValues(cdp, sessionId, contexts)
+      frames = await srcdocFrameValues(cdp)
       if (frames.some((f) => f.h1 === 'dsh-sidebar')) break
       await sleep(300)
     }
