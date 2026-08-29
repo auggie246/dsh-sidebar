@@ -22,6 +22,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const { spawn } = await import('node:child_process')
 const { mkdtemp, rm } = await import('node:fs/promises')
 const { tmpdir } = await import('node:os')
+const { join } = await import('node:path')
 
 // ---------- served-bundle markers (the GUI must advertise the new code) ----------
 async function bundleMarkers() {
@@ -146,21 +147,22 @@ async function focusTerminal(cdp, sessionId) {
   })()`)
 }
 
-// Last "rows cols" line printed by stty size in the terminal DOM.
+// stty size, tagged: the shell echoes RSBSIZE=<rows> <cols>, an anchor that
+// survives the surrounding escape-sequence junk in the terminal DOM text.
 async function sttySize(cdp, sessionId) {
   await focusTerminal(cdp, sessionId)
-  await typeText(cdp, sessionId, 'stty size')
+  await typeText(cdp, sessionId, 'echo RSBSIZE=$(stty size)')
   const deadline = Date.now() + 8000
   while (Date.now() < deadline) {
     const match = await evaluate(cdp, sessionId, `(() => {
       const text = document.querySelector('.rsb-term')?.textContent ?? ''
-      const rows = Array.from(text.matchAll(/(\\d+)\\s+(\\d+)/g))
-      return rows.length ? rows[rows.length - 1][0] + ' ' + rows[rows.length - 1][1] : null
+      const rows = Array.from(text.matchAll(/RSBSIZE=(\\d+)\\s+(\\d+)/g))
+      return rows.length ? rows[rows.length - 1][1] + ' ' + rows[rows.length - 1][2] : null
     })()`)
     if (match) return match
     await sleep(250)
   }
-  throw new Error('stty size never produced output in the terminal')
+  throw new Error('the RSBSIZE marker never appeared in the terminal')
 }
 
 async function openTerminalTab(cdp, sessionId) {
@@ -230,27 +232,41 @@ async function main() {
     // Rail's Panel button enables. The bootstrap session lives in the
     // Working Repository, so file previews resolve repo-relative paths.
     if (await evaluate(cdp, sessionId, `(() => { const b = document.querySelector('[data-shell-overlay] .rsb-rail button:nth-of-type(2)'); return !b || b.disabled })()`)) {
-      const clicked = await evaluate(cdp, sessionId, `(() => {
-        const b = document.querySelector('button[aria-label="New session in dsh-sidebar"]')
-          || Array.from(document.querySelectorAll('button')).find((e) => (e.getAttribute('aria-label') || '').startsWith('New session in '))
-          || Array.from(document.querySelectorAll('button')).find((e) => (e.textContent || '').trim() === 'New Session')
-        if (!b) return false
-        b.click()
-        return true
-      })()`)
+      // The workspace tree renders in its own time and the dsh-sidebar
+      // group may start collapsed (its New session button only exists once
+      // the group is expanded). Poll: wait for the button, expanding the
+      // group once on the way. The latch keeps the polls from toggling the
+      // group closed again.
+      await waitFor(cdp, sessionId, `(() => {
+        if (document.querySelector('button[aria-label="New session in dsh-sidebar"]')) return true
+        if (!window.__rsbExpandLatch) {
+          const group = Array.from(document.querySelectorAll('[role=treeitem]')).find((e) => (e.textContent || '').trim().startsWith('dsh-sidebar') && e.getAttribute('aria-expanded') === 'false')
+          if (group) { window.__rsbExpandLatch = true; group.click() }
+        }
+        return false
+      })()`, 'the dsh-sidebar workspace group to expose its New session button', 20000)
+      const clicked = await evaluate(cdp, sessionId, `(() => { const b = document.querySelector('button[aria-label="New session in dsh-sidebar"]'); if (!b) return false; b.click(); return true })()`)
       if (!clicked) throw new Error('could not open a new session from the GUI')
       await waitFor(cdp, sessionId, `!!document.querySelector('textarea[placeholder="Describe what you want to build"]')`, 'the composer to appear', 20000)
-      const filled = await evaluate(cdp, sessionId, `(() => {
-        const ta = document.querySelector('textarea[placeholder="Describe what you want to build"]')
-        if (!ta) return false
-        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
-        setter.call(ta, 'Verifier bootstrap session — this session exists only so the dsh-sidebar GUI verifiers can drive a started session. Please ignore it.')
-        ta.dispatchEvent(new Event('input', { bubbles: true }))
-        return true
-      })()`)
-      if (!filled) throw new Error('could not fill the composer')
-      await evaluate(cdp, sessionId, `(() => { const b = Array.from(document.querySelectorAll('button')).find((e) => (e.getAttribute('aria-label') || '') === 'Send message'); if (!b) return false; b.click(); return true })()`)
-      await waitFor(cdp, sessionId, `(() => { const b = document.querySelector('[data-shell-overlay] .rsb-rail button:nth-of-type(2)'); return !!b && !b.disabled })()`, 'the bootstrap session to start (Rail button enabled)', 60000)
+      let started = false
+      for (let attempt = 0; attempt < 3 && !started; attempt++) {
+        const filled = await evaluate(cdp, sessionId, `(() => {
+          const ta = document.querySelector('textarea[placeholder="Describe what you want to build"]')
+          if (!ta) return false
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+          setter.call(ta, 'Verifier bootstrap session — this session exists only so the dsh-sidebar GUI verifiers can drive a started session. Please ignore it.')
+          ta.dispatchEvent(new Event('input', { bubbles: true }))
+          return true
+        })()`)
+        if (!filled) throw new Error('could not fill the composer')
+        await waitFor(cdp, sessionId, `(() => { const b = Array.from(document.querySelectorAll('button')).find((e) => (e.getAttribute('aria-label') || '') === 'Send message'); return !!b && !b.disabled })()`, 'the Send message button to enable', 10000)
+        await evaluate(cdp, sessionId, `(() => { const b = Array.from(document.querySelectorAll('button')).find((e) => (e.getAttribute('aria-label') || '') === 'Send message'); if (!b) return false; b.click(); return true })()`)
+        try {
+          await waitFor(cdp, sessionId, `(() => { const b = document.querySelector('[data-shell-overlay] .rsb-rail button:nth-of-type(2)'); return !!b && !b.disabled })()`, 'the bootstrap session to start', 20000)
+          started = true
+        } catch (e) { /* the send click can race the composer wiring; retry */ }
+      }
+      if (!started) throw new Error('the bootstrap session never started after 3 attempts')
       console.log('bootstrap session started; Rail Panel button enabled')
     }
     const panelButton = `[data-shell-overlay] .rsb-rail button:nth-of-type(2)`

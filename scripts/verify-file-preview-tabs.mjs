@@ -232,27 +232,41 @@ async function main() {
     // Rail's Panel button enables. The bootstrap session lives in the
     // Working Repository, so file previews resolve repo-relative paths.
     if (await evaluate(cdp, sessionId, `(() => { const b = document.querySelector('[data-shell-overlay] .rsb-rail button:nth-of-type(2)'); return !b || b.disabled })()`)) {
-      const clicked = await evaluate(cdp, sessionId, `(() => {
-        const b = document.querySelector('button[aria-label="New session in dsh-sidebar"]')
-          || Array.from(document.querySelectorAll('button')).find((e) => (e.getAttribute('aria-label') || '').startsWith('New session in '))
-          || Array.from(document.querySelectorAll('button')).find((e) => (e.textContent || '').trim() === 'New Session')
-        if (!b) return false
-        b.click()
-        return true
-      })()`)
+      // The workspace tree renders in its own time and the dsh-sidebar
+      // group may start collapsed (its New session button only exists once
+      // the group is expanded). Poll: wait for the button, expanding the
+      // group once on the way. The latch keeps the polls from toggling the
+      // group closed again.
+      await waitFor(cdp, sessionId, `(() => {
+        if (document.querySelector('button[aria-label="New session in dsh-sidebar"]')) return true
+        if (!window.__rsbExpandLatch) {
+          const group = Array.from(document.querySelectorAll('[role=treeitem]')).find((e) => (e.textContent || '').trim().startsWith('dsh-sidebar') && e.getAttribute('aria-expanded') === 'false')
+          if (group) { window.__rsbExpandLatch = true; group.click() }
+        }
+        return false
+      })()`, 'the dsh-sidebar workspace group to expose its New session button', 20000)
+      const clicked = await evaluate(cdp, sessionId, `(() => { const b = document.querySelector('button[aria-label="New session in dsh-sidebar"]'); if (!b) return false; b.click(); return true })()`)
       if (!clicked) throw new Error('could not open a new session from the GUI')
       await waitFor(cdp, sessionId, `!!document.querySelector('textarea[placeholder="Describe what you want to build"]')`, 'the composer to appear', 20000)
-      const filled = await evaluate(cdp, sessionId, `(() => {
-        const ta = document.querySelector('textarea[placeholder="Describe what you want to build"]')
-        if (!ta) return false
-        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
-        setter.call(ta, 'Verifier bootstrap session — this session exists only so the dsh-sidebar GUI verifiers can drive a started session. Please ignore it.')
-        ta.dispatchEvent(new Event('input', { bubbles: true }))
-        return true
-      })()`)
-      if (!filled) throw new Error('could not fill the composer')
-      await evaluate(cdp, sessionId, `(() => { const b = Array.from(document.querySelectorAll('button')).find((e) => (e.getAttribute('aria-label') || '') === 'Send message'); if (!b) return false; b.click(); return true })()`)
-      await waitFor(cdp, sessionId, `(() => { const b = document.querySelector('[data-shell-overlay] .rsb-rail button:nth-of-type(2)'); return !!b && !b.disabled })()`, 'the bootstrap session to start (Rail button enabled)', 60000)
+      let started = false
+      for (let attempt = 0; attempt < 3 && !started; attempt++) {
+        const filled = await evaluate(cdp, sessionId, `(() => {
+          const ta = document.querySelector('textarea[placeholder="Describe what you want to build"]')
+          if (!ta) return false
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+          setter.call(ta, 'Verifier bootstrap session — this session exists only so the dsh-sidebar GUI verifiers can drive a started session. Please ignore it.')
+          ta.dispatchEvent(new Event('input', { bubbles: true }))
+          return true
+        })()`)
+        if (!filled) throw new Error('could not fill the composer')
+        await waitFor(cdp, sessionId, `(() => { const b = Array.from(document.querySelectorAll('button')).find((e) => (e.getAttribute('aria-label') || '') === 'Send message'); return !!b && !b.disabled })()`, 'the Send message button to enable', 10000)
+        await evaluate(cdp, sessionId, `(() => { const b = Array.from(document.querySelectorAll('button')).find((e) => (e.getAttribute('aria-label') || '') === 'Send message'); if (!b) return false; b.click(); return true })()`)
+        try {
+          await waitFor(cdp, sessionId, `(() => { const b = document.querySelector('[data-shell-overlay] .rsb-rail button:nth-of-type(2)'); return !!b && !b.disabled })()`, 'the bootstrap session to start', 20000)
+          started = true
+        } catch (e) { /* the send click can race the composer wiring; retry */ }
+      }
+      if (!started) throw new Error('the bootstrap session never started after 3 attempts')
       console.log('bootstrap session started; Rail Panel button enabled')
     }
     const panelButton = `[data-shell-overlay] .rsb-rail button:nth-of-type(2)`
@@ -296,7 +310,9 @@ async function main() {
 
     // 3. A Markdown file renders as styled, script-free HTML.
     await openFileTab(cdp, sessionId, 'Markdown file', MD_FIXTURE)
-    await waitFor(cdp, sessionId, `document.querySelectorAll('.rsb-tabframe').length >= 2`, 'the Markdown preview iframe to mount')
+    // Only the ACTIVE tab's content renders, so after focusing the
+    // markdown tab exactly one iframe exists: its title carries the path.
+    await waitFor(cdp, sessionId, `(() => { const f = document.querySelector('.rsb-tabframe'); return !!f && (f.getAttribute('title') || '').includes('README') })()`, 'the Markdown preview iframe to mount')
     frames = []
     const mdDeadline = Date.now() + 8000
     while (Date.now() < mdDeadline) {
