@@ -177,7 +177,9 @@ async function main() {
     if (!railReady) throw new Error('the Sidebar Rail did not appear on the page (plugin missing or GUI gate)')
     console.log('GUI loaded; Rail found. Expanding the Sidebar…')
 
-    await evaluate(cdp, sessionId, `document.querySelector('[data-shell-overlay] .rsb-rail').click()`)
+    // The Rail is a two-button bar (ticket #1); the first button is the
+    // Sidebar toggle. The container itself has no click action by design.
+    await evaluate(cdp, sessionId, `document.querySelector('[data-shell-overlay] .rsb-rail button').click()`)
     const panelDeadline = Date.now() + 5000
     let panelOpen = false
     while (Date.now() < panelDeadline) {

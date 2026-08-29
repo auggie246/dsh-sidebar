@@ -115,6 +115,14 @@ function findNode(node, predicate) {
   return findNode(node.props?.children, predicate)
 }
 
+// The Rail is a two-button bar (ticket #1): the container div has no onClick
+// and no title, so tests drive the first button child — the Sidebar toggle.
+function railToggle(railNode) {
+  const buttons = (railNode.props?.children || []).filter((child) => child && child.type === 'button')
+  assert.equal(buttons.length, 2, 'the Rail must hold exactly two stacked buttons')
+  return buttons[0]
+}
+
 function sessionProps(sessionId, path) {
   return {
     sessionId,
@@ -133,30 +141,26 @@ assert.equal(typeof details, 'function', 'the Sidebar details slot must be regis
 assert.equal(typeof overlay, 'function', 'the Rail overlay slot must be registered')
 
 const sessionA = sessionProps('session-a', '/workspace/a')
-const firstPanelElement = details(sessionA)
-const firstPanel = renderFunction(firstPanelElement.type, firstPanelElement.props)
-const collapse = findNode(firstPanel, (node) => node.props?.title === 'Collapse sidebar')
-assert.ok(collapse, 'the Sidebar must provide its collapse control')
-collapse.props.onClick()
-
+// The `»` header collapse control is gone (ticket #1): the globally collapsed
+// baseline is now the store's initial state, so the first Rail render must
+// already read 'Open workspace sidebar'.
 let rail = findNode(overlay(sessionA), (node) => node.props?.className === 'rsb-rail')
-assert.equal(rail.props.title, 'Open workspace sidebar', 'collapsing the Sidebar must update the global preference')
+assert.equal(railToggle(rail).props.title, 'Open workspace sidebar', 'the Sidebar must start globally collapsed')
 
-unmountFunction(firstPanelElement.type)
 const sessionB = sessionProps('session-b', '/workspace/b')
 const secondPanelElement = details(sessionB)
 renderFunction(secondPanelElement.type, secondPanelElement.props)
 rail = findNode(overlay(sessionB), (node) => node.props?.className === 'rsb-rail')
 assert.equal(
-  rail.props.title,
+  railToggle(rail).props.title,
   'Open workspace sidebar',
   'switching sessions must preserve the globally collapsed Sidebar preference',
 )
 assert.equal(layoutCalls.includes('open'), false, 'switching sessions must not reopen a globally collapsed Details Column')
 
-rail.props.onClick()
+railToggle(rail).props.onClick()
 rail = findNode(overlay(sessionB), (node) => node.props?.className === 'rsb-rail')
-assert.equal(rail.props.title, 'Collapse workspace sidebar', 'opening the Sidebar must update the global preference')
+assert.equal(railToggle(rail).props.title, 'Collapse workspace sidebar', 'opening the Sidebar must update the global preference')
 assert.equal(layoutCalls.at(-1), 'open', 'opening the Sidebar must open the current Details Column')
 
 layout.closeDetails()
@@ -166,7 +170,7 @@ const thirdPanelElement = details(sessionC)
 renderFunction(thirdPanelElement.type, thirdPanelElement.props)
 rail = findNode(overlay(sessionC), (node) => node.props?.className === 'rsb-rail')
 assert.equal(
-  rail.props.title,
+  railToggle(rail).props.title,
   'Collapse workspace sidebar',
   'switching sessions must preserve the globally open Sidebar preference',
 )

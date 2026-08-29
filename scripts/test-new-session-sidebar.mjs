@@ -113,6 +113,14 @@ function findClass(node, className) {
   return findClass(node.props?.children, className)
 }
 
+// The Rail is a two-button bar (ticket #1): the container div has no onClick,
+// so tests drive the first button child — the Sidebar toggle.
+function railToggle(railNode) {
+  const buttons = (railNode.props?.children || []).filter((child) => child && child.type === 'button')
+  assert.equal(buttons.length, 2, 'the Rail must hold exactly two stacked buttons')
+  return buttons[0]
+}
+
 const overlay = registrations.get('shell.overlay')
 assert.equal(typeof overlay, 'function', 'the shell.overlay Rail must be registered')
 const props = {
@@ -128,7 +136,7 @@ const props = {
 let tree = renderFunction(overlay, props)
 const rail = findClass(tree, 'rsb-rail')
 assert.ok(rail, 'the Rail must render on the new session page')
-rail.props.onClick()
+railToggle(rail).props.onClick()
 
 tree = renderFunction(overlay, props)
 const panel = findClass(tree, 'rsb-overlay-panel')
@@ -152,11 +160,12 @@ assert.match(
   'the center column must reserve the panel width while the new-session Sidebar is open',
 )
 
-// Click the Rail of the open render — its closure holds open = true, so the
-// click collapses. The fake React never re-renders, so dropping the hook state
-// models the re-render React performs after the store notifies subscribers.
+// Click the Rail's Sidebar toggle of the open render — its closure holds
+// open = true, so the click collapses. The fake React never re-renders, so
+// dropping the hook state models the re-render React performs after the
+// store notifies subscribers.
 const openRail = findClass(tree, 'rsb-rail')
-openRail.props.onClick()
+railToggle(openRail).props.onClick()
 hookState.clear()
 tree = renderFunction(overlay, props)
 assert.equal(findClass(tree, 'rsb-overlay-panel'), null, 'clicking the Rail again must collapse the Sidebar')
