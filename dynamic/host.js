@@ -427,7 +427,6 @@ return {
         return { ok: false, error: String((e && e.message) || e) }
       }
     })
-    // seam(#7): add the readFile host handler directly above this line
 
     // Ticket #8: keep the kernel PTY size in step with the rendered
     // terminal surface. The DSH `LocalTerminalHandle` exposes no resize
@@ -449,6 +448,5 @@ return {
         return { ok: false, error: String((e && e.message) || e) }
       }
     })
-    // seam(#8): add the ptyResize host handler directly above this line
   },
 }

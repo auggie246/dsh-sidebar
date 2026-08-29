@@ -235,8 +235,6 @@ const XTERM = (function () {
         strip(tab) { return { title: tab.path, label: baseName(tab.path) } },
         render(tab) { return [h(FilePreviewTab, { key: tab.id, tab })] },
       },
-      // seam(#7): add the file-preview tab type entries directly above this line
-      // seam(#8): add the terminal tab type entry directly above this line
     }
     function tabOfType(entry) {
       const def = entry && TAB_TYPES[entry.type]
@@ -1063,7 +1061,6 @@ const XTERM = (function () {
             h('span', { className: 'rsb-tab-picker-sub' }, 'Render a repo Markdown file')),
           
         
-          // seam(#7): add the HTML file and Markdown file picker items directly above this line
           h('button', {
             className: 'rsb-tab-picker-item',
             title: 'Interactive shell in the workspace',
@@ -1075,7 +1072,6 @@ const XTERM = (function () {
           },
             h('span', { className: 'rsb-tab-picker-title' }, 'Terminal'),
             h('span', { className: 'rsb-tab-picker-sub' }, 'Interactive shell in the workspace')),
-          // seam(#8): add the Terminal picker item directly above this line
         ) : null,
         picker === 'url' ? h('form', { className: 'rsb-tab-picker-form', onSubmit: (e) => { if (e && e.preventDefault) e.preventDefault(); submitDraftUrl() } },
           h('div', { className: 'rsb-tab-picker-head' }, 'LOCALHOST URL'),
@@ -1134,8 +1130,6 @@ const XTERM = (function () {
             h('button', { type: 'submit', className: 'rsb-tab-picker-open', disabled: !/\S/.test(draft) }, 'Open'))) : null,
         
         
-        // seam(#7): add the HTML file and Markdown file path-entry forms directly above this line
-        // seam(#8): the Terminal type needs no entry form
         // Content area (ticket #6): the active Panel Tab's content, or the
         // empty state while no tabs exist. Closing the last tab returns
         // here without closing the Panel. Per-type rendering lives in the
@@ -1355,13 +1349,11 @@ const XTERM = (function () {
       '.rsb-tabcontent > .rsb-error { margin: 8px; }',
       
       
-      // seam(#7): add file-preview styles directly above this line
       // Terminal (ticket #8): the terminal surface fills the tab content
       // area; the fallback output view keeps monospace pre-wrap on the
       // same dark surface for environments without the vendored library.
       '.rsb-term { flex: 1; min-height: 0; padding: 4px; background: #1e1e1e; }',
       '.rsb-term-fallback { flex: 1; margin: 0; padding: 8px; overflow: auto; background: #1e1e1e; color: #e6edf3; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }',
-      // seam(#8): add terminal styles directly above this line
     ].join('\n'))
 
     // The vendored xterm stylesheet rides the generated block: inject it
