@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Panel tab strip check (ticket #5): the open Panel renders a tab strip
-// header row with a disabled + affordance (the picker lands in a later
-// ticket) and an empty state while no Panel Tabs exist; the Panel and its
-// Rail button stay hidden/inert before the session starts — the same
-// startedSession gate the Rail already uses — and come alive after.
+// header row with an empty state while no Panel Tabs exist; the + affordance
+// is live since ticket #6 (its full behavior is covered by
+// test-panel-tabs.mjs). The Panel and its Rail button stay hidden/inert
+// before the session starts — the same startedSession gate the Rail already
+// uses — and come alive after.
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import vm from 'node:vm'
@@ -207,8 +208,8 @@ const blankProps = {
   },
 }
 
-// 1. The open Panel renders a tab strip header row with exactly one disabled
-//    + affordance, and an empty state while no Panel Tabs exist.
+// 1. The open Panel renders a tab strip header row with exactly one live +
+//    affordance, and an empty state while no Panel Tabs exist.
 {
   const env = boot()
   let tree = env.render(startedProps)
@@ -223,10 +224,10 @@ const blankProps = {
   env.visit(strip, (n) => { if (n.type === 'button' && n.props?.className === 'rsb-tabstrip-add') addButtons.push(n) })
   assert.equal(addButtons.length, 1, 'the strip must hold exactly one + affordance')
   const add = addButtons[0]
-  assert.equal(add.props.disabled, true, 'the + affordance stays disabled until the tab picker lands')
+  assert.equal(add.props.disabled, undefined, 'the + affordance is live since ticket #6')
+  assert.equal(typeof add.props.onClick, 'function', 'the + affordance must open the type picker')
   assert.equal(add.props.title, 'New panel tab')
   assert.equal(add.props['aria-label'], 'New panel tab')
-  assert.equal(add.props.onClick, undefined, 'the + affordance must be non-functional in this ticket')
   assert.deepEqual(add.props.children, ['+'], 'the affordance must be the + glyph')
 
   const empty = env.findClass(panel, 'rsb-panel-empty')
@@ -238,7 +239,7 @@ const blankProps = {
   assert.ok(!strings.some((t) => t.includes('Use +')), 'the empty state must not invite clicking the disabled +')
 
   assert.match(env.stylesheet, /\.rsb-tabstrip \{[^}]*border-bottom: 1px solid/, 'the strip must read as a header row')
-  assert.match(env.stylesheet, /\.rsb-tabstrip-add:disabled \{[^}]*cursor: default/, 'the disabled affordance must not suggest interactivity')
+  assert.match(env.stylesheet, /\.rsb-tab-picker \{[^}]*position: absolute/, 'the type picker must float over the Panel content')
 }
 
 // 2. Before the session starts the Panel and its Rail button are inert.

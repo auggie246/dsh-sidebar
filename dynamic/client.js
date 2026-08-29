@@ -123,6 +123,76 @@ return {
       return height
     }
     applyPanelH(initialPanelState.panelHeight)
+
+    // ---------- Panel Tabs (ticket #6) ----------
+    // A Panel holds an ordered strip of Panel Tabs (CONTEXT.md). The open
+    // tab list and the active tab persist per session under
+    // dsh.rsidebar.panels.v1.<sessionId>, following the panel-state pattern
+    // above. Only the localhost-url type exists today; unknown types in
+    // stored state are dropped, so a tab this build cannot render never
+    // comes back from storage.
+    const TABS_KEY_BASE = 'dsh.rsidebar.panels.v1.'
+    const TAB_TYPE_LOCALHOST_URL = 'localhost-url'
+    function tabsStorageKey(sessionId) { return TABS_KEY_BASE + sessionId }
+    function normalizeTabUrl(raw) {
+      let s = String(raw || '').trim()
+      if (!s) return ''
+      if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) s = 'http://' + s
+      if (!/^https?:\/\/\S+$/i.test(s)) return ''
+      return s
+    }
+    // Identity of a Panel Tab URL: the scheme is made explicit, scheme and
+    // host are case-folded (hosts are case-insensitive; paths are not), and
+    // trailing slashes are dropped, so `localhost:5173`,
+    // `HTTP://LocalHost:5173/` and `http://localhost:5173` dedupe onto one
+    // tab. An explicit scheme other than http/https is refused, which also
+    // refuses javascript: URLs.
+    function tabIdentity(url) {
+      const s = String(url || '')
+      const at = s.indexOf('://')
+      if (at === -1) return s.replace(/\/+$/, '')
+      const pathStart = s.indexOf('/', at + 3)
+      const authority = pathStart === -1 ? s.slice(at + 3) : s.slice(at + 3, pathStart)
+      const rest = pathStart === -1 ? '' : s.slice(pathStart)
+      return (s.slice(0, at).toLowerCase() + '://' + authority.toLowerCase() + rest).replace(/\/+$/, '')
+    }
+    function newTabId() {
+      return 'tab-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)
+    }
+    function makeTab(url, id) {
+      return { id: typeof id === 'string' && id ? id : newTabId(), type: TAB_TYPE_LOCALHOST_URL, url }
+    }
+    function findTabByIdentity(tabs, identity) {
+      return tabs.find((t) => tabIdentity(t.url) === identity)
+    }
+    function readPanelTabs(sessionId) {
+      const empty = { tabs: [], active: null }
+      if (!sessionId) return empty
+      const raw = lsGet(tabsStorageKey(sessionId))
+      if (!raw) return empty
+      try {
+        const p = JSON.parse(raw)
+        if (!p || typeof p !== 'object' || Array.isArray(p)) return empty
+        const seen = new Set()
+        const tabs = []
+        for (const entry of (Array.isArray(p.tabs) ? p.tabs : [])) {
+          if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+          if (entry.type !== TAB_TYPE_LOCALHOST_URL) continue
+          if (typeof entry.url !== 'string' || !entry.url) continue
+          const identity = tabIdentity(entry.url)
+          if (!identity || seen.has(identity)) continue
+          seen.add(identity)
+          tabs.push(makeTab(entry.url, entry.id))
+        }
+        const active = tabs.some((t) => t.id === p.active) ? p.active : (tabs.length ? tabs[0].id : null)
+        return { tabs, active }
+      } catch (e) { return empty }
+    }
+    function persistPanelTabs(sessionId, state) {
+      if (!sessionId) return
+      lsSet(tabsStorageKey(sessionId), JSON.stringify({ tabs: state.tabs, active: state.active }))
+    }
+
     const fpStore = createStore('')
     const cwdStore = createStore('')
     const cwdBySession = new Map()
@@ -531,8 +601,19 @@ return {
     // the shell's layout store, which no plugin can read — means every
     // edge movement (drag-resizes, sidebar collapse/expand, Details Column
     // open/close, viewport changes) arrives as one ResizeObserver event.
-    function BottomPanel() {
+    function BottomPanel(props) {
+      const sessionId = (props && props.sessionId) || ''
       const [rect, setRect] = React.useState(null)
+      // Panel Tab state (ticket #6): read once per mount from
+      // dsh.rsidebar.panels.v1.<sessionId> and rewritten on every change.
+      // The Rail keys this component by session, so a session switch
+      // remounts it and re-reads that session's list.
+      const [tabs, setTabs] = React.useState(() => readPanelTabs(sessionId))
+      // Type picker state (ticket #6): null hides the picker, 'types' lists
+      // the tab types, 'url' is the Localhost URL entry form.
+      const [picker, setPicker] = React.useState(null)
+      const [draft, setDraft] = React.useState('')
+      const [formErr, setFormErr] = React.useState('')
       // Drag state lives on an instance object (ticket #4): pointermove
       // only records the pointer, and one rAF per frame applies the
       // height, so a storm of pointer events costs one layout write per
@@ -591,7 +672,50 @@ return {
         }
         persistPanelState()
       }
+      // Panel Tab mutations (ticket #6): every change rewrites the session
+      // key, so the list and the active tab survive reloads and Panel
+      // close/reopen cycles.
+      function setAndPersistTabs(next) {
+        setTabs(next)
+        persistPanelTabs(sessionId, next)
+      }
+      // One submit either focuses the tab that already owns this URL
+      // identity or appends a new tab; both paths persist.
+      function submitDraftUrl() {
+        const url = normalizeTabUrl(draft)
+        if (!url) {
+          setFormErr('Enter an http:// or https:// URL.')
+          return
+        }
+        const existing = findTabByIdentity(tabs.tabs, tabIdentity(url))
+        if (existing) {
+          setAndPersistTabs({ tabs: tabs.tabs, active: existing.id })
+        } else {
+          const tab = makeTab(url)
+          setAndPersistTabs({ tabs: tabs.tabs.concat([tab]), active: tab.id })
+        }
+        setPicker(null)
+        setDraft('')
+        setFormErr('')
+      }
+      function closeTab(id, e) {
+        if (e && e.stopPropagation) e.stopPropagation()
+        const idx = tabs.tabs.findIndex((t) => t.id === id)
+        if (idx === -1) return
+        const rest = tabs.tabs.filter((t) => t.id !== id)
+        // Closing the active tab activates its nearest surviving neighbor;
+        // closing the last tab leaves the Panel open but empty.
+        const active = tabs.active === id
+          ? (rest.length ? rest[Math.min(idx, rest.length - 1)].id : null)
+          : tabs.active
+        setAndPersistTabs({ tabs: rest, active })
+        if (rest.length === 0) setPicker(null)
+      }
+      function focusTab(id) {
+        if (tabs.active !== id) setAndPersistTabs({ tabs: tabs.tabs, active: id })
+      }
       if (!rect) return null
+      const activeTab = tabs.tabs.find((t) => t.id === tabs.active) || null
       return h('section', {
         className: 'rsb-bottom-panel',
         'aria-label': 'Panel',
@@ -609,19 +733,78 @@ return {
           onPointerCancel: onDragEnd,
           onLostPointerCapture: onDragEnd,
         }),
-        // Tab strip header (ticket #5). The + affordance is inert here on
-        // purpose: the tab picker lands in a later ticket, so the button
-        // stays disabled until it has something to open.
+        // Tab strip header (tickets #5 and #6). The + affordance opens the
+        // type picker; Localhost URL is its first working type. Each Panel
+        // Tab shows its URL, focuses on click, and closes with its own X.
         h('div', { className: 'rsb-tabstrip' },
           h('button', {
             className: 'rsb-tabstrip-add',
             title: 'New panel tab',
             'aria-label': 'New panel tab',
-            disabled: true,
-          }, '+')),
-        h('div', { className: 'rsb-panel-empty' },
-          h('div', { className: 'rsb-panel-empty-title' }, 'No tabs open.'),
-          h('div', { className: 'rsb-panel-empty-sub' }, 'Panel tabs will appear here.')))
+            'aria-expanded': picker ? 'true' : 'false',
+            onClick: () => { setPicker((v) => (v ? null : 'types')); setFormErr('') },
+          }, '+'),
+          tabs.tabs.map((t) => h('div', {
+            key: t.id,
+            className: 'rsb-tab' + (t.id === tabs.active ? ' rsb-tab-active' : ''),
+            role: 'tab',
+            'aria-selected': t.id === tabs.active ? 'true' : 'false',
+            title: t.url,
+            onClick: () => focusTab(t.id),
+          },
+            h('span', { className: 'rsb-tab-label' }, t.url),
+            h('button', {
+              className: 'rsb-tab-close',
+              title: 'Close tab',
+              'aria-label': 'Close tab',
+              onClick: (e) => closeTab(t.id, e),
+            }, '×')))),
+        picker === 'types' ? h('div', { className: 'rsb-tab-picker' },
+          h('button', {
+            className: 'rsb-tab-picker-item',
+            title: 'Preview a URL in an iframe',
+            onClick: () => { setPicker('url'); setDraft(''); setFormErr('') },
+          },
+            h('span', { className: 'rsb-tab-picker-title' }, 'Localhost URL'),
+            h('span', { className: 'rsb-tab-picker-sub' }, 'Preview a URL in an iframe'))) : null,
+        picker === 'url' ? h('form', { className: 'rsb-tab-picker-form', onSubmit: (e) => { if (e && e.preventDefault) e.preventDefault(); submitDraftUrl() } },
+          h('div', { className: 'rsb-tab-picker-head' }, 'LOCALHOST URL'),
+          h('input', {
+            className: 'rsb-tab-picker-input',
+            type: 'text',
+            placeholder: 'http://localhost:3000',
+            value: draft,
+            autoFocus: true,
+            onChange: (e) => { setDraft(e.target.value); setFormErr('') },
+            onKeyDown: (e) => { if (e && e.key === 'Escape') setPicker(null) },
+          }),
+          formErr ? h('div', { className: 'rsb-tab-picker-error' }, formErr) : null,
+          h('div', { className: 'rsb-tab-picker-warning' },
+            'Some sites refuse to load inside an iframe. If the preview stays blank, open the URL in a normal browser tab.'),
+          h('div', { className: 'rsb-tab-picker-actions' },
+            h('button', { type: 'button', className: 'rsb-act', onClick: () => setPicker('types') }, 'Back'),
+            h('button', { type: 'submit', className: 'rsb-tab-picker-open', disabled: !/\S/.test(draft) }, 'Open'))) : null,
+        // Content area (ticket #6): the active Panel Tab's iframe, or the
+        // empty state while no tabs exist. Closing the last tab returns
+        // here without closing the Panel. The one-line hint keeps the
+        // iframe-refusal warning visible for the tab's whole life, not
+        // only inside the entry form. The sandbox allows scripts but not
+        // same-origin: scripts run in every preview, while a preview of
+        // the GUI's own origin can never reach the parent page or the
+        // dsh.rsidebar.* storage keys.
+        activeTab
+          ? h('div', { className: 'rsb-tabcontent' },
+              h('div', { className: 'rsb-tabframe-hint' },
+                'Some sites refuse to load inside an iframe — a blank preview means refusal.'),
+              h('iframe', {
+                className: 'rsb-tabframe',
+                src: activeTab.url,
+                title: activeTab.url,
+                sandbox: 'allow-scripts allow-forms allow-popups',
+              }))
+          : h('div', { className: 'rsb-panel-empty' },
+              h('div', { className: 'rsb-panel-empty-title' }, 'No tabs open.'),
+              h('div', { className: 'rsb-panel-empty-sub' }, 'Panel tabs will appear here.')))
     }
 
     function Rail(props) {
@@ -644,7 +827,12 @@ return {
       // The Panel exists only after the session has started (ticket #5):
       // before that the region stays unmounted and its Rail button stays
       // inert, matching the startedSession gate the Sidebar toggle uses.
-      const panel = panelOpen && startedSession ? h(BottomPanel) : null
+      // The Panel is keyed by session (ticket #6): each session's Panel
+      // Tabs live under their own dsh.rsidebar.panels.v1.<sessionId> key,
+      // and the key forces a remount — and a re-read — on session switch.
+      const panel = panelOpen && startedSession
+        ? h(BottomPanel, { key: startedSessionId, sessionId: startedSessionId })
+        : null
       if (!layout) return panel
       // Two-button Rail bar in the VS Code layout style. The top button
       // toggles the Sidebar with the Rail's existing behavior; the second
@@ -723,12 +911,35 @@ return {
       // reserved for it can never drift apart.
       '.rsb-panel-drag { position: absolute; top: -3px; left: 0; right: 0; height: 6px; z-index: 2; cursor: row-resize; touch-action: none; }',
       '.rsb-panel-drag:hover { background: var(--dsw-alias-border-l2); }',
-      // Tab strip header and empty state (ticket #5): the + affordance is
-      // disabled until the tab picker lands in a later ticket.
+      // Tab strip header and empty state (tickets #5 and #6). The type
+      // picker floats over the Panel content, anchored under the strip.
       '.rsb-tabstrip { display: flex; align-items: center; gap: 4px; min-height: 30px; padding: 0 6px; background: var(--dsw-specific-sidebar-fill); border-bottom: 1px solid var(--dsw-alias-border-l1); flex-shrink: 0; }',
       '.rsb-tabstrip-add { appearance: none; background: none; border: 1px solid transparent; border-radius: 4px; color: var(--dsw-alias-label-secondary); cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 7px; }',
       '.rsb-tabstrip-add:hover:not(:disabled) { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }',
-      '.rsb-tabstrip-add:disabled { opacity: 0.5; cursor: default; }',
+      '.rsb-tab-picker { position: absolute; top: 36px; left: 6px; z-index: 40; width: 280px; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--dsw-alias-bg-overlay); border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; box-shadow: 0 8px 28px rgba(0,0,0,0.28); }',
+      '.rsb-tab-picker-item { appearance: none; background: none; border: none; border-radius: 6px; text-align: left; padding: 6px 8px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; color: var(--dsw-alias-label-primary); }',
+      '.rsb-tab-picker-item:hover { background: var(--dsw-alias-bg-layer-2); }',
+      '.rsb-tab-picker-title { font-size: 12px; font-weight: 600; }',
+      '.rsb-tab-picker-sub { font-size: 10px; color: var(--dsw-alias-label-secondary); }',
+      '.rsb-tab-picker-head { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dsw-alias-label-secondary); }',
+      '.rsb-tab-picker-input { width: 100%; box-sizing: border-box; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 5px 6px; font: inherit; }',
+      '.rsb-tab-picker-input:focus { outline: 1px solid var(--dsw-alias-brand-primary); }',
+      '.rsb-tab-picker-warning { font-size: 10px; line-height: 1.45; color: var(--dsw-alias-label-secondary); }',
+      '.rsb-tab-picker-error { font-size: 10px; color: var(--dsw-alias-state-error-primary); }',
+      '.rsb-tab-picker-actions { display: flex; justify-content: flex-end; gap: 6px; }',
+      '.rsb-tab-picker-open { appearance: none; background: var(--dsw-alias-brand-primary); color: #ffffff; border: none; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-weight: 600; font-size: 11px; line-height: 1.4; }',
+      '.rsb-tab-picker-open:disabled { opacity: 0.5; cursor: default; }',
+      // Panel Tabs (ticket #6): chips in the strip, their close control,
+      // and the iframe content area of the active tab.
+      '.rsb-tab { display: flex; align-items: center; gap: 3px; flex: 0 1 auto; min-width: 0; max-width: 180px; margin-left: 2px; padding: 3px 4px 3px 8px; border: 1px solid transparent; border-radius: 6px; color: var(--dsw-alias-label-secondary); cursor: pointer; font-size: 11px; line-height: 1.2; user-select: none; }',
+      '.rsb-tab:hover { background: var(--dsw-alias-bg-layer-2); }',
+      '.rsb-tab-active, .rsb-tab-active:hover { background: var(--dsw-alias-bg-layer-2); border-color: var(--dsw-alias-border-l1); color: var(--dsw-alias-label-primary); }',
+      '.rsb-tab-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }',
+      '.rsb-tab-close { appearance: none; background: none; border: none; border-radius: 3px; color: inherit; cursor: pointer; padding: 0 3px; font-size: 12px; line-height: 1; opacity: 0.55; flex-shrink: 0; }',
+      '.rsb-tab-close:hover { opacity: 1; }',
+      '.rsb-tabcontent { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base); }',
+      '.rsb-tabframe-hint { flex-shrink: 0; padding: 3px 8px; font-size: 10px; line-height: 1.4; color: var(--dsw-alias-label-secondary); background: var(--dsw-specific-sidebar-fill); border-bottom: 1px solid var(--dsw-alias-border-l1); }',
+      '.rsb-tabframe { flex: 1; min-height: 0; width: 100%; border: none; background: var(--dsw-alias-bg-base); }',
       '.rsb-panel-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--dsw-alias-label-secondary); text-align: center; padding: 12px; }',
       '.rsb-panel-empty-title { font-size: 12px; }',
       '.rsb-panel-empty-sub { font-size: 10px; }',
