@@ -148,6 +148,7 @@ const XTERM = (function () {
     // above. Per-type behavior lives in the TAB_TYPES registry below.
     const TABS_KEY_BASE = 'dsh.rsidebar.panels.v1.'
     const TAB_TYPE_HTML_FILE = 'html-file'
+      const TAB_TYPE_TERMINAL = 'terminal'
     const TAB_TYPE_MARKDOWN_FILE = 'markdown-file'
     const TAB_TYPE_LOCALHOST_URL = 'localhost-url'
     function tabsStorageKey(sessionId) { return TABS_KEY_BASE + sessionId }
@@ -188,6 +189,25 @@ const XTERM = (function () {
     // .rsb-tabcontent while the tab is active, dispose releases per-tab
     // resources when the tab closes. A type this build does not know is
     // dropped from storage, so a tab it cannot render never comes back.
+      // Terminal sessions (ticket #8, ADR 0002): one entry per open terminal
+      // tab, keyed by tab id and holding the host-side PTY session id. The
+      // map lives for the page's lifetime, so a tab switch away and back
+      // reuses the same shell instead of spawning a new one. Closing the tab
+      // deletes the entry and kills the shell (see dispose below).
+      const terminalSessions = new Map()
+    // One registry entry per file-preview type; the two types differ only in
+    // the tab type constant they carry.
+    function filePreviewType(type) {
+      return {
+        identity(tab) { return String(tab.path || '').trim() },
+        restore(entry) {
+          if (typeof entry.path !== 'string' || !entry.path.trim()) return null
+          return { id: typeof entry.id === 'string' && entry.id ? entry.id : newTabId(), type, path: entry.path.trim() }
+        },
+        strip(tab) { return { title: tab.path, label: baseName(tab.path) } },
+        render(tab) { return [h(FilePreviewTab, { key: tab.id, tab })] },
+      }
+    }
     const TAB_TYPES = {
       [TAB_TYPE_LOCALHOST_URL]: {
         identity(tab) { return tabIdentity(tab.url) },
@@ -234,6 +254,24 @@ const XTERM = (function () {
         },
         strip(tab) { return { title: tab.path, label: baseName(tab.path) } },
         render(tab) { return [h(FilePreviewTab, { key: tab.id, tab })] },
+      },
+      [TAB_TYPE_TERMINAL]: {
+        // Terminals never dedupe: every tab owns its own shell, so the
+        // tab id is the identity. No restore on purpose — the PTY session
+        // lives in the host process and dies with the page, so a stored
+        // terminal tab is dropped on boot; re-attach is ticket #9.
+        identity(tab) { return tab.id },
+        render(tab) { return [h(TerminalTab, { key: tab.id, tab })] },
+        strip(tab) { return { title: 'Terminal', label: 'Terminal' } },
+        // Closing a Terminal tab kills its shell immediately, with no
+        // confirmation: closeTab invokes this synchronously.
+        dispose(tab) {
+          const session = terminalSessions.get(tab.id)
+          if (!session) return
+          terminalSessions.delete(tab.id)
+          session.alive = false
+          host.call('ptyKill', { id: session.ptyId }).catch(() => {})
+        },
       },
     }
     function tabOfType(entry) {
@@ -861,6 +899,179 @@ const XTERM = (function () {
         + 'ul, ol { padding-left: 24px; }'
         + '@media (prefers-color-scheme: dark) { body { color: #e6edf3; background: #0d1117; } h1, h2 { border-color: #30363d; } h5, h6 { color: #8b949e; } pre, code { background: #161b22; } pre { border-color: #30363d; } blockquote { border-color: #30363d; color: #8b949e; } a { color: #58a6ff; } hr { border-color: #30363d; } }'
         + '</style></head><body>' + renderMarkdown(src) + '</body></html>'
+    }
+    // ---------- Terminal Panel Tab (ticket #8, ADR 0002) ----------
+    // One live shell per tab. The PTY session lives in the host process:
+    // ptySpawn creates it, keystrokes ride the unary ptyWrite RPC, output
+    // arrives through the long-poll ptyPull loop resuming from the
+    // returned seq, and ptyResize keeps the kernel PTY in step with the
+    // rendered surface. The xterm.js library is vendored inlined above
+    // (XTERM); without it the tab degrades to a plain output view.
+    const TERM_FONT_FAMILY = 'ui-monospace, SFMono-Regular, Menlo, monospace'
+    const TERM_FONT_SIZE = 12
+    const TERM_PAD = 4
+    const TERM_FALLBACK_MAX = 100000
+
+    function getTerminalCtor() {
+      return XTERM && XTERM.Terminal ? XTERM.Terminal : null
+    }
+
+    function TerminalTab(props) {
+      const tab = (props && props.tab) || {}
+      // Instance state (never React state): the pull loop and the resize
+      // machinery live on `inst`, and `inst.dead` is set by the effect
+      // cleanup so the loop stops when the tab unmounts or closes.
+      const [inst] = React.useState(() => ({
+        dead: false, session: null, container: null, term: null, ro: null,
+        charW: 0, charH: 0, cols: 0, rows: 0,
+      }))
+      const [err, setErr] = React.useState('')
+      const [attached, setAttached] = React.useState(false)
+      const [out, setOut] = React.useState('')
+
+      // xterm opens into this div. Where no DOM exists (the vm test
+      // harness, or the vendored library failed to load) the ref never
+      // fires and the fallback pre below becomes the output view.
+      function containerRef(el) { inst.container = el || null }
+
+      // One hidden probe measures the monospace cell size; the measurement
+      // is cached on the instance and reused for every resize conversion.
+      function measureCell() {
+        if (inst.charW > 0 || !inst.container || typeof document === 'undefined') return
+        try {
+          const probe = document.createElement('span')
+          probe.textContent = 'WWWWWWWWWW'
+          probe.style.fontFamily = TERM_FONT_FAMILY
+          probe.style.fontSize = TERM_FONT_SIZE + 'px'
+          probe.style.position = 'absolute'
+          probe.style.visibility = 'hidden'
+          probe.style.whiteSpace = 'pre'
+          inst.container.appendChild(probe)
+          const rect = probe.getBoundingClientRect()
+          inst.container.removeChild(probe)
+          if (rect && rect.width > 0 && rect.height > 0) {
+            inst.charW = rect.width / 10
+            inst.charH = rect.height
+          }
+        } catch (e) {}
+      }
+
+      // Convert the container's pixel box to PTY cols/rows. When they
+      // changed, resize xterm and push the size to the PTY. Resize
+      // failures are swallowed: the size sync is progressive enhancement
+      // and never worth disturbing the shell over.
+      function measureBox() {
+        const el = inst.container
+        if (!el || inst.dead) return
+        measureCell()
+        if (!(inst.charW > 0) || !(inst.charH > 0)) return
+        const cols = Math.max(2, Math.floor((el.clientWidth - 2 * TERM_PAD) / inst.charW))
+        const rows = Math.max(2, Math.floor((el.clientHeight - 2 * TERM_PAD) / inst.charH))
+        if (cols === inst.cols && rows === inst.rows) return
+        inst.cols = cols
+        inst.rows = rows
+        if (inst.term) { try { inst.term.resize(cols, rows) } catch (e) {} }
+        if (inst.session) host.call('ptyResize', { id: inst.session.ptyId, cols: cols, rows: rows }).catch(() => {})
+      }
+
+      function observeBox() {
+        if (inst.ro || !inst.container || typeof ResizeObserver !== 'function') return
+        try {
+          const observer = new ResizeObserver(() => { measureBox() })
+          observer.observe(inst.container)
+          inst.ro = observer
+        } catch (e) {}
+      }
+
+      // Attach xterm once the container exists. Keystrokes ride the unary
+      // ptyWrite RPC; the prompt echo comes back through ptyPull.
+      function attachTerminal() {
+        if (inst.term || !inst.container) return
+        const ctor = getTerminalCtor()
+        if (!ctor) return
+        try {
+          const term = new ctor({ fontFamily: TERM_FONT_FAMILY, fontSize: TERM_FONT_SIZE })
+          term.open(inst.container)
+          term.onData((d) => {
+            if (inst.session) host.call('ptyWrite', { id: inst.session.ptyId, data: d })
+          })
+          inst.term = term
+          setAttached(true)
+        } catch (e) {
+          inst.term = null
+        }
+        // The shell spawns at 80x24; sync the real size right after open.
+        measureBox()
+      }
+
+      // Output loop (ADR 0002): long-poll ptyPull resuming from the
+      // returned seq. The ring clamps a too-old afterSeq to the retained
+      // tail, so 0 is always a safe start. alive:false, a killed session,
+      // or a closed tab ends the loop.
+      async function pullLoop(session) {
+        let afterSeq = 0
+        while (!inst.dead && session.alive) {
+          let pull = null
+          try {
+            pull = await host.call('ptyPull', { id: session.ptyId, afterSeq: afterSeq })
+            if (!pull || !pull.ok) throw new Error((pull && pull.error) || 'ptyPull failed')
+          } catch (e) {
+            if (!inst.dead) setErr(String((e && e.message) || e))
+            return
+          }
+          if (inst.dead || !session.alive) return
+          if (pull.chunk) {
+            if (inst.term) {
+              try { inst.term.write(pull.chunk) } catch (e) {}
+            } else {
+              // Fallback view: bound the buffer so a long session cannot
+              // grow the state (and the re-rendered pre) without end.
+              setOut((prev) => (prev.length + pull.chunk.length > TERM_FALLBACK_MAX
+                ? (prev + pull.chunk).slice(-TERM_FALLBACK_MAX)
+                : prev + pull.chunk))
+            }
+          }
+          afterSeq = pull.seq
+          if (!pull.alive) return
+        }
+      }
+
+      React.useEffect(() => {
+        inst.dead = false
+        async function start() {
+          // Ensure a session: spawn on first mount, reuse on remounts.
+          let session = terminalSessions.get(tab.id)
+          if (!session) {
+            let spawn = null
+            try {
+              spawn = await host.call('ptySpawn', withCwd({ cols: 80, rows: 24 }))
+              if (!spawn || !spawn.ok) throw new Error((spawn && spawn.error) || 'ptySpawn failed')
+            } catch (e) {
+              if (!inst.dead) setErr(String((e && e.message) || e))
+              return
+            }
+            session = { ptyId: spawn.id, alive: true }
+            terminalSessions.set(tab.id, session)
+          }
+          if (inst.dead) return
+          inst.session = session
+          attachTerminal()
+          observeBox()
+          pullLoop(session)
+        }
+        start()
+        return () => {
+          inst.dead = true
+          if (inst.ro) { try { inst.ro.disconnect() } catch (e) {} inst.ro = null }
+          if (inst.term) { try { inst.term.dispose() } catch (e) {} inst.term = null }
+        }
+      }, [])
+
+      if (err) {
+        return h('div', { className: 'rsb-error', role: 'alert' }, err)
+      }
+      return h('div', { className: 'rsb-term', ref: containerRef },
+        attached ? null : h('pre', { className: 'rsb-term-fallback' }, out))
     }
     // ---------- Bottom Panel (ADR 0001) ----------
     // The shell frame has no bottom row, so the Panel is a plugin-local

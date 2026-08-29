@@ -391,40 +391,53 @@ return {
       // Repository for the HTML/Markdown Panel Tabs, mirrored from the lib
       // controller — same confinement, size cap, and shell usage.
       try {
-  const rootRaw = cwdOf(args)
-    const root = rootRaw.length > 1 ? rootRaw.replace(/\/+$/, '') : '/'
-    const path = String(args && args.path == null ? '' : args.path).trim()
-    if (!path) throw new Error('no path given')
-    if (path.indexOf('\0') !== -1) throw new Error('path contains a NUL byte')
-    let rel = path
-    if (path[0] === '/') {
-      if (root === '/') rel = path.slice(1)
-      else if (path === root) rel = ''
-      else if (path.indexOf(root + '/') === 0) rel = path.slice(root.length + 1)
-      else throw new Error('path escapes the working repository')
-    }
-    const parts = []
-    for (const segment of rel.split('/')) {
-      if (segment === '' || segment === '.') continue
-      if (segment === '..') {
-        if (parts.length === 0) throw new Error('path escapes the working repository')
-        parts.pop()
-        continue
-      }
-      parts.push(segment)
-    }
-    const abs = parts.length ? root + '/' + parts.join('/') : root
-    // Size first, content second: the wc probe refuses an oversized file
-    // before its bytes ever cross the channel. The shell service spawns
-    // commands directly (no shell), so there is no redirection — wc prints
-    // "  <size> <path>" and parseInt reads the size field.
-    const sizeRes = await shell.run(shell.resolve({ command: 'wc -c ' + shq(abs), timeoutMs: 15000 }))
-    if (sizeRes.exitCode !== 0) throw new Error(out(sizeRes.stderr).trim() || 'cannot read file')
-    const size = parseInt(out(sizeRes.stdout).trim(), 10)
-    if (Number.isFinite(size) && size > READ_FILE_LIMIT) throw new Error('file is larger than the 2 MB preview limit')
-    const catRes = await shell.run(shell.resolve({ command: 'cat -- ' + shq(abs), timeoutMs: 15000 }))
-    if (catRes.exitCode !== 0) throw new Error(out(catRes.stderr).trim() || 'cannot read file')
-    return { ok: true, content: out(catRes.stdout) }
+        const rootRaw = cwdOf(args)
+        const root = rootRaw.length > 1 ? rootRaw.replace(/\/+$/, '') : '/'
+        const path = String(args && args.path == null ? '' : args.path).trim()
+        if (!path) throw new Error('no path given')
+        if (path.indexOf('\0') !== -1) throw new Error('path contains a NUL byte')
+        let rel = path
+        if (path[0] === '/') {
+          if (root === '/') rel = path.slice(1)
+          else if (path === root) rel = ''
+          else if (path.indexOf(root + '/') === 0) rel = path.slice(root.length + 1)
+          else throw new Error('path escapes the working repository')
+        }
+        const parts = []
+        for (const segment of rel.split('/')) {
+          if (segment === '' || segment === '.') continue
+          if (segment === '..') {
+            if (parts.length === 0) throw new Error('path escapes the working repository')
+            parts.pop()
+            continue
+          }
+          parts.push(segment)
+        }
+        let abs = parts.length ? root + '/' + parts.join('/') : root
+        // Confinement is re-checked on the real path: wc and cat follow
+        // symlinks, so a link inside the repository pointing outside it must
+        // not escape. realpath also errors on a missing file.
+        const realRes = await shell.run(shell.resolve({ command: 'realpath -- ' + shq(abs), timeoutMs: 15000 }))
+        if (realRes.exitCode !== 0) throw new Error(out(realRes.stderr).trim() || 'cannot read file')
+        const real = out(realRes.stdout).trim()
+        if (root !== '/' && real !== root && real.indexOf(root + '/') !== 0) throw new Error('path escapes the working repository')
+        abs = real
+        // Size first, content second: the wc probe refuses an oversized file
+        // before its bytes ever cross the channel. The shell service spawns
+        // commands directly (no shell), so there is no redirection — wc
+        // prints "  <size> <path>" and parseInt reads the size field. An
+        // unparseable size fails closed, and the cat output is capped too,
+        // so a file growing between the two probes cannot flood the channel.
+        const sizeRes = await shell.run(shell.resolve({ command: 'wc -c ' + shq(abs), timeoutMs: 15000 }))
+        if (sizeRes.exitCode !== 0) throw new Error(out(sizeRes.stderr).trim() || 'cannot read file')
+        const size = parseInt(out(sizeRes.stdout).trim(), 10)
+        if (!Number.isFinite(size)) throw new Error('cannot measure file size')
+        if (size > READ_FILE_LIMIT) throw new Error('file is larger than the 2 MB preview limit')
+        const catRes = await shell.run(shell.resolve({ command: 'cat -- ' + shq(abs), timeoutMs: 15000 }))
+        if (catRes.exitCode !== 0) throw new Error(out(catRes.stderr).trim() || 'cannot read file')
+        const content = out(catRes.stdout)
+        if (content.length > READ_FILE_LIMIT) throw new Error('file is larger than the 2 MB preview limit')
+        return { ok: true, content }
       } catch (e) {
         return { ok: false, error: String((e && e.message) || e) }
       }

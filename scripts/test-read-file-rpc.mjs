@@ -8,12 +8,12 @@
 //
 // Seam (agreed): the manifest/codec assertions are pure and run first;
 // the harness then stubs the Cordis context and serves exactly the
-// `wc -c < '…'` and `cat -- '…'` commands the controller issues against
-// a fixture tree under a tmp workspaceRoot — no subprocess runtime is
-// imported, unlike test-pty-transport.mjs.
+// `realpath -- '…'`, `wc -c '…'` and `cat -- '…'` commands the controller
+// issues against a fixture tree under a tmp workspaceRoot — no subprocess
+// runtime is imported, unlike test-pty-transport.mjs.
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
-import { readFile as fsReadFile, stat as fsStat } from 'node:fs/promises'
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { readFile as fsReadFile, realpath as fsRealpath, stat as fsStat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { apply } from '../lib/index.js'
@@ -86,6 +86,16 @@ function makeCtx(root) {
             return { exitCode: 1, stdout: { text: '' }, stderr: { text: 'wc: ' + abs + ': No such file or directory' } }
           }
         }
+        m = /^realpath -- '(.*)'$/.exec(command)
+        if (m) {
+          const abs = unquote(m[1])
+          try {
+            const real = await fsRealpath(abs)
+            return { exitCode: 0, stdout: { text: real + '\n' }, stderr: { text: '' } }
+          } catch {
+            return { exitCode: 1, stdout: { text: '' }, stderr: { text: 'realpath: ' + abs + ': No such file or directory' } }
+          }
+        }
         m = /^cat -- '(.*)'$/.exec(command)
         if (m) {
           const abs = unquote(m[1])
@@ -138,11 +148,19 @@ try {
 
   // ------------------------------------------------------------------
   // 2. Confinement: '..' above the root and absolute paths outside it
-  //    reject before any shell command is issued.
+  //    reject before any shell command is issued, and a symlink inside
+  //    the repository pointing outside it must not escape either (the
+  //    confinement is re-checked on the real path).
   // ------------------------------------------------------------------
   await assert.rejects(() => gateway.readFile(workspaceRoot, '../outside'), /escapes the working repository/, 'a path above the root must reject')
   await assert.rejects(() => gateway.readFile(workspaceRoot, 'a/../../escape'), /escapes the working repository/, 'a climbing path must reject')
   await assert.rejects(() => gateway.readFile(workspaceRoot, '/etc/passwd'), /escapes the working repository/, 'an absolute path outside the root must reject')
+  const outsideDir = mkdtempSync(join(tmpdir(), 'rsb-read-outside-'))
+  const outsideFile = join(outsideDir, 'secret.txt')
+  writeFileSync(outsideFile, 'outside\n')
+  symlinkSync(outsideFile, join(workspaceRoot, 'escape-link.html'))
+  await assert.rejects(() => gateway.readFile(workspaceRoot, 'escape-link.html'), /escapes the working repository/, 'a symlink pointing outside the root must reject')
+  rmSync(outsideDir, { recursive: true, force: true })
   console.log('readFile confinement check passed')
 
   // ------------------------------------------------------------------

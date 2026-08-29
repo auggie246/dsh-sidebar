@@ -32,6 +32,21 @@ const TABS_KEY_BASE = 'dsh.rsidebar.panels.v1.'
     assert.ok(twin.includes('const XTERM = (function () {'), 'each client twin must inline the vendored XTERM block')
     assert.ok(twin.includes(xtermJs.slice(0, 200)), 'the vendored library must be pasted verbatim into each twin')
   }
+  // The dynamic twin must carry the same terminal half as lib (README:
+  // dynamic/ is the one-session bundle of this plugin), and the twin host
+  // must handle ptyResize — a half-mirrored twin only fails at click time.
+  const twinHost = await readFile(new URL('../dynamic/host.js', import.meta.url), 'utf8')
+  for (const needle of [
+    "const TAB_TYPE_TERMINAL = 'terminal'",
+    'const terminalSessions = new Map()',
+    '[TAB_TYPE_TERMINAL]: {',
+    'function TerminalTab(props)',
+    "host.call('ptySpawn', withCwd({ cols: 80, rows: 24 }))",
+    "host.call('ptyResize', { id: inst.session.ptyId",
+  ]) {
+    assert.ok(dynamicSource.includes(needle), 'the dynamic twin must carry ' + needle)
+  }
+  assert.ok(twinHost.includes("harness.handle('ptyResize'"), 'the dynamic twin host must handle ptyResize')
   console.log('vendoring check passed')
 }
 

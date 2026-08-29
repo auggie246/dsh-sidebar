@@ -14,7 +14,7 @@ const baseUrl = process.env.DSH_WEB_URL ?? 'http://127.0.0.1:3080'
 const chromeBin = process.env.DSH_SIDEBAR_CHROME
   ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const viewport = { width: 1440, height: 900 }
-const HTML_FIXTURE = 'docs/fixtures/preview.html'
+const HTML_FIXTURE = 'scripts/fixtures/preview.html'
 const MD_FIXTURE = 'README.md'
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
