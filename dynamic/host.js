@@ -34,6 +34,75 @@ return {
       return { code: res.exitCode, out: out(res.stdout), err: out(res.stderr).trim() }
     }
 
+    // Terminal transport (ADR 0002): PTY sessions live in the DSH host
+    // process. Output is buffered in a bounded per-shell ring and served by
+    // the long-poll ptyPull; the buffer also backs reload re-attach.
+    const subprocess = ctx.get('subprocess')
+    const RING_LIMIT = 100 * 1024
+    const PULL_HOLD_MS = 1000
+    const terminals = new Map()
+    let ptyCounter = 0
+
+    function ptySize(value, label) {
+      if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(label + ' must be a finite number')
+      return Math.max(2, Math.floor(value))
+    }
+
+    function wake(session) {
+      const waiters = Array.from(session.waiters)
+      for (const waiter of waiters) waiter()
+    }
+
+    // A UTF-8 sequence can straddle two output chunks; hold the trailing
+    // incomplete sequence and prepend it to the next chunk so the ring never
+    // stores replacement-corrupted text.
+    function splitUtf8(buf) {
+      const n = buf.length
+      let i = n - 1
+      while (i >= 0 && (buf[i] & 0xC0) === 0x80) i--
+      if (i < 0) return { complete: buf, pending: null }
+      const lead = buf[i]
+      let need = 1
+      if ((lead & 0xE0) === 0xC0) need = 2
+      else if ((lead & 0xF0) === 0xE0) need = 3
+      else if ((lead & 0xF8) === 0xF0) need = 4
+      if (n - i < need) return { complete: buf.slice(0, i), pending: buf.slice(i) }
+      return { complete: buf, pending: null }
+    }
+
+    function appendBody(session, body) {
+      if (!body) return
+      session.seq += 1
+      session.chunks.push({ seq: session.seq, text: body })
+      session.bytes += Buffer.byteLength(body, 'utf8')
+      while (session.bytes > RING_LIMIT && session.chunks.length > 0) {
+        const dropped = session.chunks.shift()
+        session.bytes -= Buffer.byteLength(dropped.text, 'utf8')
+      }
+      wake(session)
+    }
+
+    function appendChunk(session, chunk) {
+      const raw = typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : chunk
+      const joined = session.pending ? Buffer.concat([session.pending, raw]) : raw
+      const split = splitUtf8(joined)
+      session.pending = split.pending && split.pending.length > 0 ? split.pending : null
+      appendBody(session, split.complete.toString('utf8'))
+    }
+
+    // Newest chunks with seq > afterSeq; clamps to what the ring still retains.
+    function readFrom(session, afterSeq) {
+      let seq = afterSeq
+      let chunk = ''
+      for (const entry of session.chunks) {
+        if (entry.seq > seq) {
+          seq = entry.seq
+          chunk = chunk + entry.text
+        }
+      }
+      return { seq: seq, chunk: chunk }
+    }
+
     harness.handle('status', async (args) => {
       try {
         const cwd = cwdOf(args)
@@ -218,6 +287,103 @@ return {
       if (op !== 'fetch' && op !== 'pull' && op !== 'push') return { ok: false, error: 'unknown sync op' }
       const r = await git(cwdOf(args), op, { timeoutMs: 90000 })
       return r.code === 0 ? { ok: true } : { ok: false, error: r.err || r.out || ('git ' + op + ' failed') }
+    })
+
+    harness.handle('ptySpawn', async (args) => {
+      try {
+        if (!subprocess || typeof subprocess.spawnTerminal !== 'function') return { ok: false, error: 'subprocess service unavailable' }
+        const handle = await subprocess.spawnTerminal({
+          argv: [process.env.SHELL || '/bin/sh'],
+          cwd: cwdOf(args),
+          rows: ptySize(args && args.rows, 'rows'),
+          cols: ptySize(args && args.cols, 'cols'),
+          graceMs: 2000,
+        })
+        ptyCounter += 1
+        const session = { id: 'pty-' + ptyCounter, handle: handle, chunks: [], bytes: 0, seq: 0, waiters: new Set(), alive: true, pending: null }
+        terminals.set(session.id, session)
+        handle.output.on('data', (chunk) => appendChunk(session, chunk))
+        // The stream ends after the terminal's queued output, so this wake is
+        // the final one after exit; `done` settling marks the session not
+        // alive. Any held partial UTF-8 sequence is flushed here: the stream
+        // will not deliver more bytes after this point.
+        handle.output.on('end', () => {
+          if (session.pending && session.pending.length > 0) {
+            const tail = session.pending
+            session.pending = null
+            appendBody(session, tail.toString('utf8'))
+          }
+          wake(session)
+        })
+        const settle = () => {
+          session.alive = false
+          wake(session)
+        }
+        handle.done.then(settle, settle)
+        return { ok: true, id: session.id, pid: handle.pid }
+      } catch (e) {
+        return { ok: false, error: String((e && e.message) || e) }
+      }
+    })
+
+    harness.handle('ptyWrite', async (args) => {
+      const id = args && args.id
+      const session = terminals.get(id)
+      if (!session) return { ok: false, error: 'unknown pty session: ' + id }
+      try {
+        const data = args && args.data
+        await session.handle.write(data == null ? '' : String(data))
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, error: String((e && e.message) || e) }
+      }
+    })
+
+    harness.handle('ptyPull', async (args) => {
+      const id = args && args.id
+      const session = terminals.get(id)
+      if (!session) return { ok: false, error: 'unknown pty session: ' + id }
+      const afterSeqRaw = args && args.afterSeq
+      const afterSeq = typeof afterSeqRaw === 'number' && Number.isFinite(afterSeqRaw) ? afterSeqRaw : 0
+      const first = readFrom(session, afterSeq)
+      if (first.chunk !== '') return { ok: true, seq: first.seq, chunk: first.chunk, alive: session.alive }
+      if (!session.alive) return { ok: true, seq: afterSeq, chunk: '', alive: false }
+      // Long-poll: hold until new output lands (waiters re-read the ring) or
+      // the ~1s hold elapses; a dead shell reports alive: false immediately.
+      return await new Promise((resolve) => {
+        let settled = false
+        let timer = null
+        function finish(pull) {
+          if (settled) return
+          settled = true
+          session.waiters.delete(waiter)
+          clearTimeout(timer)
+          resolve(pull)
+        }
+        function waiter() {
+          if (settled) return
+          const read = readFrom(session, afterSeq)
+          if (read.chunk !== '' || !session.alive) {
+            finish({ ok: true, seq: read.seq, chunk: read.chunk, alive: session.alive })
+          }
+        }
+        timer = setTimeout(() => finish({ ok: true, seq: afterSeq, chunk: '', alive: session.alive }), PULL_HOLD_MS)
+        session.waiters.add(waiter)
+      })
+    })
+
+    harness.handle('ptyKill', async (args) => {
+      const id = args && args.id
+      const session = terminals.get(id)
+      if (!session) return { ok: false, error: 'unknown pty session: ' + id }
+      try {
+        await session.handle.terminate()
+      } finally {
+        session.alive = false
+        wake(session)
+      }
+      terminals.delete(id)
+      return { ok: true }
     })
   },
 }
