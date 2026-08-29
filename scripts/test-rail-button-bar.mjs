@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Rail button bar check: the Rail is a two-button bar (Sidebar toggle on
-// top, inert Panel toggle below), the Sidebar header keeps exactly one
+// top, Panel toggle below), the Sidebar header keeps exactly one
 // toggle path, and Rail space outside the buttons is not a click target.
+// The Panel toggle's own behavior is pinned by test-bottom-panel.mjs; the
+// document stub's null querySelector makes the open Panel render nothing.
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import vm from 'node:vm'
@@ -54,7 +56,10 @@ const context = {
   },
   // The lib client inserts its stylesheet through ctx.effect; a minimal
   // document stub lets that effect run so the test can inspect the CSS.
+  // querySelector returning null keeps the BottomPanel measurement effect
+  // inert here (no shell frame in this stub).
   document: {
+    querySelector() { return null },
     createElement() { return { textContent: '' } },
     head: { appendChild(el) { styleElements.push(el) } },
   },
@@ -221,18 +226,23 @@ rail = railNode()
 assert.equal(railButtons(rail)[0].props.title, 'Open workspace sidebar', 'the second click must set the open preference back to closed')
 assert.equal(layoutCalls.at(-1), 'close', 'closing the Sidebar must close the Details Column for a started session')
 
-// 3. The second button is visibly inert: disabled, no handler, no effect.
-const inert = railButtons(rail)[1]
-assert.equal(inert.props.disabled, true, 'the Panel button must be disabled')
-assert.equal(inert.props.onClick, undefined, 'the Panel button must have no click handler to force')
-assert.equal(inert.props.title, 'Panel is not available yet')
-assert.equal(inert.props['aria-label'], 'Panel is not available yet')
+// 3. The second button is the live Panel toggle; its full behavior is
+//    pinned by test-bottom-panel.mjs. Here: enabled, titled, and clicking
+//    it must not disturb the Sidebar toggle path above.
+const panelButton = railButtons(rail)[1]
+assert.equal(panelButton.props.disabled, undefined, 'the Panel button must be enabled now that the Panel exists')
+assert.equal(panelButton.props.title, 'Open panel', 'the closed Panel labels its Rail button as open')
+assert.equal(panelButton.props['aria-label'], 'Open panel')
 const callsBefore = layoutCalls.length
 const titleBefore = railButtons(rail)[0].props.title
+panelButton.props.onClick()
 rail = railNode()
-assert.equal(layoutCalls.length, callsBefore, 'the inert Panel button must not change layout state')
-assert.equal(railButtons(rail)[0].props.title, titleBefore, 'the inert Panel button must not change the open preference')
-assert.match(stylesheet, /\.rsb-rail button:disabled \{[^}]*cursor: default/, 'the disabled Panel button must not suggest interactivity')
+assert.equal(railButtons(rail)[0].props.title, titleBefore, 'the Panel toggle must not change the Sidebar open preference')
+assert.equal(layoutCalls.length, callsBefore, 'the Panel toggle must not change layout state')
+railButtons(rail)[1].props.onClick()
+rail = railNode()
+assert.equal(railButtons(rail)[0].props.title, titleBefore, 'the second Panel click must leave the Sidebar preference alone')
+assert.match(stylesheet, /\.rsb-rail button:disabled \{[^}]*cursor: default/, 'a disabled Rail button must not suggest interactivity')
 
 // The Rail keeps its footprint while splitting it into two 36px targets.
 assert.match(stylesheet, /\.rsb-rail \{[^}]*height: 72px/, 'the Rail container must keep its 72px footprint')

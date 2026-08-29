@@ -64,6 +64,7 @@ return {
     }
 
     const openStore = createStore(false)
+    const panelOpenStore = createStore(false)
     const fpStore = createStore('')
     const cwdStore = createStore('')
     const cwdBySession = new Map()
@@ -464,8 +465,42 @@ return {
             h(c.render, null)))))
     }
 
+    // ---------- Bottom Panel (ADR 0001) ----------
+    // The shell frame has no bottom row, so the Panel is a plugin-local
+    // fixed-position region. It mirrors the center conversation column's
+    // box: the frame's second element child (the same structural fact the
+    // padding rules below rely on). Measuring that element — instead of
+    // the shell's layout store, which no plugin can read — means every
+    // edge movement (drag-resizes, sidebar collapse/expand, Details Column
+    // open/close, viewport changes) arrives as one ResizeObserver event.
+    function BottomPanel() {
+      const [rect, setRect] = React.useState(null)
+      React.useEffect(() => {
+        if (typeof document === 'undefined') return () => {}
+        const overlayEl = document.querySelector('[data-shell-overlay]')
+        const center = overlayEl && overlayEl.parentElement ? overlayEl.parentElement.children[1] : null
+        if (!center || typeof center.getBoundingClientRect !== 'function') return () => {}
+        const measure = () => {
+          const r = center.getBoundingClientRect()
+          setRect({ left: r.left, width: r.width })
+        }
+        measure()
+        if (typeof ResizeObserver !== 'function') return () => {}
+        const observer = new ResizeObserver(measure)
+        observer.observe(center)
+        return () => observer.disconnect()
+      }, [])
+      if (!rect) return null
+      return h('section', {
+        className: 'rsb-bottom-panel',
+        'aria-label': 'Panel',
+        style: { left: rect.left + 'px', width: rect.width + 'px' },
+      })
+    }
+
     function Rail(props) {
       const open = useStore(openStore)
+      const panelOpen = useStore(panelOpenStore)
       const startedSessionId = props && props.useSessions
         ? props.useSessions((s) => {
             const current = s && s.current
@@ -480,13 +515,15 @@ return {
         if (open) layout.openDetails()
         else layout.closeDetails()
       }, [startedSessionId, open])
-      if (!layout) return null
+      const panel = panelOpen ? h(BottomPanel) : null
+      if (!layout) return panel
       // Two-button Rail bar in the VS Code layout style. The top button
       // toggles the Sidebar with the Rail's existing behavior; the second
-      // reserves the future Panel toggle and stays inert until the Panel
-      // exists. Glyphs draw with currentColor so they follow the theme.
-      // The container carries no onClick: Rail space outside the buttons
-      // does nothing.
+      // toggles the bottom Panel. The two toggles are independent: each
+      // owns its own store, and the Panel renders on every Rail return
+      // path so either region works with or without the other. Glyphs
+      // draw with currentColor so they follow the theme. The container
+      // carries no onClick: Rail space outside the buttons does nothing.
       const rail = h('div', { className: 'rsb-rail' },
         h('button', {
           title: open ? 'Collapse workspace sidebar' : 'Open workspace sidebar',
@@ -505,23 +542,26 @@ return {
           h('rect', { x: '1.5', y: '2.5', width: '13', height: '11', rx: '1.5', fill: 'none', stroke: 'currentColor' }),
           h('rect', { x: '9', y: '4.5', width: '4', height: '7', fill: 'currentColor' }))),
         h('button', {
-          title: 'Panel is not available yet',
-          'aria-label': 'Panel is not available yet',
-          disabled: true,
+          title: panelOpen ? 'Close panel' : 'Open panel',
+          'aria-label': panelOpen ? 'Close panel' : 'Open panel',
+          'aria-pressed': panelOpen ? 'true' : 'false',
+          onClick: () => panelOpenStore.set(!panelOpen),
         },
         h('svg', { width: 16, height: 16, viewBox: '0 0 16 16', 'aria-hidden': 'true' },
           h('rect', { x: '1.5', y: '2.5', width: '13', height: '11', rx: '1.5', fill: 'none', stroke: 'currentColor' }),
           h('rect', { x: '3.5', y: '9', width: '9', height: '2.5', fill: 'currentColor' }))))
-      if (!open || startedSession) return rail
+      if (!open || startedSession) return h(React.Fragment, null, panel, rail)
       return h(React.Fragment, null,
+        panel,
         h('aside', { className: 'rsb-overlay-panel' }, h(SidebarPanel, props)),
         rail)
     }
 
     styles.insert([
-      // One shared panel width so the floating panel and the space reserved
-      // for it can never drift apart.
-      ':root { --rsb-panel-w: min(360px, calc(100vw - 22px)); }',
+      // One shared panel width and one shared Panel height, so each
+      // floating region and the space reserved for it can never drift
+      // apart.
+      ':root { --rsb-panel-w: min(360px, calc(100vw - 22px)); --rsb-panel-h: 240px; }',
       '.rsb-rail { position: fixed; top: 50%; right: 0; transform: translateY(-50%); z-index: 60; width: 22px; height: 72px; display: flex; flex-direction: column; border: 1px solid var(--dsw-alias-border-l1); border-right: none; border-radius: 8px 0 0 8px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); pointer-events: auto; overflow: hidden; }',
       '.rsb-rail button { appearance: none; box-sizing: border-box; width: 100%; height: 36px; display: flex; align-items: center; justify-content: center; margin: 0; padding: 0; border: none; background: none; color: inherit; cursor: pointer; }',
       '.rsb-rail button:hover:not(:disabled) { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }',
@@ -534,6 +574,15 @@ return {
       // details, overlay layer follow). Reserving the panel width there makes
       // the conversation resize instead of being covered.
       '[data-details-collapsed]:has([data-shell-overlay] .rsb-overlay-panel) > div:nth-child(2) { padding-right: var(--rsb-panel-w); transition: padding-right var(--ds-transition-duration-slow) var(--ds-ease-in-out); }',
+      // The Panel (ADR 0001): a plugin-local fixed region mirroring
+      // the center conversation column's box. The reservation rule walks
+      // the same structure the BottomPanel measurement does: the frame is
+      // the overlay layer's direct parent, and its second element child is
+      // the center column. While the Panel is mounted, that column's
+      // bottom padding equals the Panel height, so no conversation content
+      // is covered.
+      '.rsb-bottom-panel { position: fixed; bottom: 0; z-index: 58; box-sizing: border-box; height: var(--rsb-panel-h); border-top: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-base); box-shadow: 0 -8px 28px rgba(0,0,0,0.15); pointer-events: auto; }',
+      'div:has(> [data-shell-overlay] .rsb-bottom-panel) > div:nth-child(2) { padding-bottom: var(--rsb-panel-h); }',
       '.rsb-panel { position: relative; display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font-size: 12px; }',
       '.rsb-header { display: flex; align-items: center; gap: 4px; padding: 7px 10px; background: var(--dsw-specific-sidebar-fill); border-bottom: 1px solid var(--dsw-alias-border-l1); flex-shrink: 0; }',
       '.rsb-title { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--dsw-alias-label-secondary); }',

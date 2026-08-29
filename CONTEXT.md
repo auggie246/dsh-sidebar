@@ -19,7 +19,8 @@ and future Cards belong to this same Sidebar.
 
 The thin, always-visible strip pinned to the right edge of the GUI that the
 Sidebar collapses into. The Rail is the re-entry point: clicking it re-expands
-the Sidebar. The Rail never disappears, even when the Sidebar is closed.
+the Sidebar. It is a stacked bar of region toggles: one for the Sidebar, one
+for the Panel. The Rail never disappears, even when the Sidebar is closed.
 
 ## Card
 
