@@ -385,5 +385,8 @@ return {
       terminals.delete(id)
       return { ok: true }
     })
+
+    // seam(#7): add the readFile host handler directly above this line
+    // seam(#8): add the ptyResize host handler directly above this line
   },
 }

@@ -128,9 +128,7 @@ return {
     // A Panel holds an ordered strip of Panel Tabs (CONTEXT.md). The open
     // tab list and the active tab persist per session under
     // dsh.rsidebar.panels.v1.<sessionId>, following the panel-state pattern
-    // above. Only the localhost-url type exists today; unknown types in
-    // stored state are dropped, so a tab this build cannot render never
-    // comes back from storage.
+    // above. Per-type behavior lives in the TAB_TYPES registry below.
     const TABS_KEY_BASE = 'dsh.rsidebar.panels.v1.'
     const TAB_TYPE_LOCALHOST_URL = 'localhost-url'
     function tabsStorageKey(sessionId) { return TABS_KEY_BASE + sessionId }
@@ -165,6 +163,44 @@ return {
     function findTabByIdentity(tabs, identity) {
       return tabs.find((t) => tabIdentity(t.url) === identity)
     }
+    // Per-type Panel Tab seam: one entry per tab type. identity maps a tab
+    // to its dedupe key, restore rebuilds a tab from persisted storage
+    // state (null drops the entry), render returns the content children of
+    // .rsb-tabcontent while the tab is active, dispose releases per-tab
+    // resources when the tab closes. A type this build does not know is
+    // dropped from storage, so a tab it cannot render never comes back.
+    const TAB_TYPES = {
+      [TAB_TYPE_LOCALHOST_URL]: {
+        identity(tab) { return tabIdentity(tab.url) },
+        restore(entry) {
+          if (typeof entry.url !== 'string' || !entry.url) return null
+          return makeTab(entry.url, entry.id)
+        },
+        render(tab) {
+          // The sandbox allows scripts but not same-origin: scripts run in
+          // every preview, while a preview of the GUI's own origin can
+          // never reach the parent page or the dsh.rsidebar.* storage
+          // keys. The one-line hint keeps the iframe-refusal warning
+          // visible for the tab's whole life, not only inside the form.
+          return [
+            h('div', { className: 'rsb-tabframe-hint' },
+              'Some sites refuse to load inside an iframe — a blank preview means refusal.'),
+            h('iframe', {
+              className: 'rsb-tabframe',
+              src: tab.url,
+              title: tab.url,
+              sandbox: 'allow-scripts allow-forms allow-popups',
+            }),
+          ]
+        },
+      },
+      // seam(#7): add the file-preview tab type entries directly above this line
+      // seam(#8): add the terminal tab type entry directly above this line
+    }
+    function tabOfType(entry) {
+      const def = entry && TAB_TYPES[entry.type]
+      return def && def.restore ? def.restore(entry) : null
+    }
     function readPanelTabs(sessionId) {
       const empty = { tabs: [], active: null }
       if (!sessionId) return empty
@@ -177,12 +213,12 @@ return {
         const tabs = []
         for (const entry of (Array.isArray(p.tabs) ? p.tabs : [])) {
           if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
-          if (entry.type !== TAB_TYPE_LOCALHOST_URL) continue
-          if (typeof entry.url !== 'string' || !entry.url) continue
-          const identity = tabIdentity(entry.url)
-          if (!identity || seen.has(identity)) continue
-          seen.add(identity)
-          tabs.push(makeTab(entry.url, entry.id))
+          const tab = tabOfType(entry)
+          if (!tab) continue
+          const key = tab.type + '\n' + TAB_TYPES[tab.type].identity(tab)
+          if (seen.has(key)) continue
+          seen.add(key)
+          tabs.push(tab)
         }
         const active = tabs.some((t) => t.id === p.active) ? p.active : (tabs.length ? tabs[0].id : null)
         return { tabs, active }
@@ -702,6 +738,11 @@ return {
         if (e && e.stopPropagation) e.stopPropagation()
         const idx = tabs.tabs.findIndex((t) => t.id === id)
         if (idx === -1) return
+        const closed = tabs.tabs[idx]
+        if (closed) {
+          const def = TAB_TYPES[closed.type]
+          if (def && def.dispose) def.dispose(closed)
+        }
         const rest = tabs.tabs.filter((t) => t.id !== id)
         // Closing the active tab activates its nearest surviving neighbor;
         // closing the last tab leaves the Panel open but empty.
@@ -713,6 +754,10 @@ return {
       }
       function focusTab(id) {
         if (tabs.active !== id) setAndPersistTabs({ tabs: tabs.tabs, active: id })
+      }
+      function tabContentOf(tab) {
+        const def = TAB_TYPES[tab.type]
+        return def && def.render ? def.render(tab) : []
       }
       if (!rect) return null
       const activeTab = tabs.tabs.find((t) => t.id === tabs.active) || null
@@ -766,7 +811,10 @@ return {
             onClick: () => { setPicker('url'); setDraft(''); setFormErr('') },
           },
             h('span', { className: 'rsb-tab-picker-title' }, 'Localhost URL'),
-            h('span', { className: 'rsb-tab-picker-sub' }, 'Preview a URL in an iframe'))) : null,
+            h('span', { className: 'rsb-tab-picker-sub' }, 'Preview a URL in an iframe')),
+          // seam(#7): add the HTML file and Markdown file picker items directly above this line
+          // seam(#8): add the Terminal picker item directly above this line
+        ) : null,
         picker === 'url' ? h('form', { className: 'rsb-tab-picker-form', onSubmit: (e) => { if (e && e.preventDefault) e.preventDefault(); submitDraftUrl() } },
           h('div', { className: 'rsb-tab-picker-head' }, 'LOCALHOST URL'),
           h('input', {
@@ -784,24 +832,15 @@ return {
           h('div', { className: 'rsb-tab-picker-actions' },
             h('button', { type: 'button', className: 'rsb-act', onClick: () => setPicker('types') }, 'Back'),
             h('button', { type: 'submit', className: 'rsb-tab-picker-open', disabled: !/\S/.test(draft) }, 'Open'))) : null,
-        // Content area (ticket #6): the active Panel Tab's iframe, or the
+        // seam(#7): add the HTML file and Markdown file path-entry forms directly above this line
+        // seam(#8): the Terminal type needs no entry form
+        // Content area (ticket #6): the active Panel Tab's content, or the
         // empty state while no tabs exist. Closing the last tab returns
-        // here without closing the Panel. The one-line hint keeps the
-        // iframe-refusal warning visible for the tab's whole life, not
-        // only inside the entry form. The sandbox allows scripts but not
-        // same-origin: scripts run in every preview, while a preview of
-        // the GUI's own origin can never reach the parent page or the
-        // dsh.rsidebar.* storage keys.
+        // here without closing the Panel. Per-type rendering lives in the
+        // TAB_TYPES registry.
         activeTab
           ? h('div', { className: 'rsb-tabcontent' },
-              h('div', { className: 'rsb-tabframe-hint' },
-                'Some sites refuse to load inside an iframe — a blank preview means refusal.'),
-              h('iframe', {
-                className: 'rsb-tabframe',
-                src: activeTab.url,
-                title: activeTab.url,
-                sandbox: 'allow-scripts allow-forms allow-popups',
-              }))
+              ...tabContentOf(activeTab))
           : h('div', { className: 'rsb-panel-empty' },
               h('div', { className: 'rsb-panel-empty-title' }, 'No tabs open.'),
               h('div', { className: 'rsb-panel-empty-sub' }, 'Panel tabs will appear here.')))
@@ -1007,6 +1046,8 @@ return {
       '.rsb-menu { position: fixed; z-index: 101; background: var(--dsw-alias-bg-overlay); border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 4px; display: flex; flex-direction: column; gap: 2px; box-shadow: 0 8px 28px rgba(0,0,0,0.28); min-width: 170px; }',
       '.rsb-menu-item { background: none; border: none; text-align: left; padding: 5px 10px; border-radius: 5px; color: var(--dsw-alias-label-primary); cursor: pointer; font-size: 12px; }',
       '.rsb-menu-item:hover { background: var(--dsw-alias-bg-layer-2); }',
+      // seam(#7): add file-preview styles directly above this line
+      // seam(#8): add terminal styles directly above this line
     ].join('\n'))
 
     slots.inject('details', () => slots.register({ name: 'details', priority: -1 }, (props) => h(SidebarPanel, props)))
