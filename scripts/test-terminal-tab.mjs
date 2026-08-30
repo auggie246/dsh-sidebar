@@ -1,10 +1,13 @@
 #!/usr/bin/env node
-// Terminal Panel Tab check (ticket #8, ADR 0002): the + picker offers a
-// Terminal type whose tab spawns one shell through the ticket-7 transport
-// (ptySpawn in the Working Repository), streams its output through the
-// long-poll ptyPull loop resuming from the returned seq, kills the shell on
-// close with no confirmation, and — because the PTY session lives in the host
-// process — never restores from storage (re-attach is ticket #9).
+// Terminal Panel Tab check (ticket #8 + ticket #9, ADR 0002): the + picker
+// offers a Terminal type whose tab spawns one shell through the ticket-7
+// transport (ptySpawn in the Working Repository), streams its output through
+// the long-poll ptyPull loop resuming from the returned seq, and kills the
+// shell on close with no confirmation. Ticket #9 adds the lifecycle: a page
+// reload re-attaches the stored tab to its live shell (the persisted entry
+// carries the host PTY session id; the ring buffer replays the scrollback
+// from seq 0), and a session id from a previous host boot is unknown, so a
+// restored tab whose session is gone renders a dead-session placeholder.
 //
 // Seam (agreed): the rendered tree of the shell.overlay registration, the
 // injected localStorage, and a fake rsidebarGit remote that records every
@@ -43,10 +46,17 @@ const TABS_KEY_BASE = 'dsh.rsidebar.panels.v1.'
     'function TerminalTab(props)',
     "host.call('ptySpawn', withCwd({ cols: 80, rows: 24 }))",
     "host.call('ptyResize', { id: inst.session.ptyId",
+    // Ticket #9 twins: the restore/re-attach, the session-id persistence,
+    // and the dead-session placeholder must exist in the dynamic bundle too.
+    "if (typeof entry.ptyId !== 'string' || !entry.ptyId.trim()) return null",
+    'if (typeof bindSession === \'function\') bindSession(tab.id, spawn.id)',
+    'if (/unknown pty session/.test(message)) setEnded(true)',
+    "'.rsb-term-dead { flex: 1;",
   ]) {
     assert.ok(dynamicSource.includes(needle), 'the dynamic twin must carry ' + needle)
   }
   assert.ok(twinHost.includes("harness.handle('ptyResize'"), 'the dynamic twin host must handle ptyResize')
+  assert.ok(twinHost.includes("'pty-' + ptyBoot + '-' + ptyCounter"), 'the dynamic twin host must mint boot-unique session ids')
   console.log('vendoring check passed')
 }
 
@@ -283,15 +293,17 @@ function boot(env = {}) {
 }
 
 // A fake rsidebarGit remote: every call is recorded; ptySpawn resolves from a
-// scripted envelope; ptyPull resolves only when the test settles the promise,
-// which gives manual control over the long-poll loop.
+// scripted envelope (a `spawns` array is consumed one entry per call),
+// ptyPull resolves only when the test settles the promise, which gives
+// manual control over the long-poll loop.
 function makeRemote(script) {
   const calls = []
   const pullWaiters = []
   const remote = {
     ptySpawn(cwd, cols, rows) {
       calls.push({ method: 'ptySpawn', args: [cwd, cols, rows] })
-      return Promise.resolve(script.spawn)
+      const next = Array.isArray(script.spawns) ? script.spawns.shift() : script.spawn
+      return Promise.resolve(next)
     },
     ptyWrite(id, data) {
       calls.push({ method: 'ptyWrite', args: [id, data] })
@@ -504,9 +516,51 @@ function activeTabs(env, panel) {
 }
 
 // ---------------------------------------------------------------------------
-// 6. A stored terminal tab is dropped on re-boot (no restore — the PTY lives
-//    in the host process; re-attach is ticket #9), while a stored
-//    localhost-url tab still survives.
+// 6. Reload re-attach (ticket #9): a stored terminal tab re-attaches to its
+//    live shell — the persisted entry carries the host PTY session id, no
+//    shell is spawned, and the pull loop replays the ring buffer from seq 0
+//    so the scrollback comes back. An entry without a session id cannot
+//    re-attach and is dropped; non-terminal tabs restore as before.
+// ---------------------------------------------------------------------------
+{
+  const stored = new Map()
+  stored.set(TABS_KEY_BASE + 'session-a', JSON.stringify({
+    tabs: [
+      { id: 't1', type: 'terminal', ptyId: 'pty-rs9x2-1' },
+      { id: 'u1', type: 'localhost-url', url: 'http://localhost:9' },
+    ],
+    active: 't1',
+  }))
+  const fake = makeRemote({})
+  const env = boot({ storage: stored, remote: fake.remote })
+  env.renderDetails(startedProps) // publishes /workspace/a into the cwd store
+  const panel = openPanel(env)
+  const tabs = env.findAll(panel, 'rsb-tab')
+  assert.equal(tabs.length, 2, 'a stored terminal tab must restore next to the other tabs')
+  env.findClass(panel, 'rsb-term')
+  await tick()
+
+  assert.equal(fake.methodsOf('ptySpawn').length, 0, 'the restored tab must re-attach — no ptySpawn')
+  const pulls = fake.methodsOf('ptyPull')
+  assert.equal(pulls.length, 1, 'the restored tab must start exactly one pull loop')
+  assert.deepEqual(pulls[0].args, ['pty-rs9x2-1', 0], 're-attach must replay the ring buffer from seq 0')
+
+  fake.pullWaiters[0].resolve({ ok: true, value: { seq: 3, chunk: 'restored-scrollback', alive: true } })
+  await tick()
+  const after = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
+  const fallback = env.findClass(after, 'rsb-term-fallback')
+  assert.ok(fallback, 'with no xterm constructor the restored output must render in the fallback pre')
+  const outStrings = []
+  env.collectStrings(fallback, outStrings)
+  assert.ok(outStrings.join('').includes('restored-scrollback'), 'the restored scrollback must render')
+  assert.deepEqual(fake.methodsOf('ptyPull')[1].args, ['pty-rs9x2-1', 3], 'the loop must resume from the replayed seq')
+  console.log('terminal restore re-attach check passed')
+}
+
+// ---------------------------------------------------------------------------
+// 6b. A stored terminal tab without a session id cannot re-attach and is
+//     dropped on boot (the ticket-8 entries, or a crashed spawn), while a
+//     stored localhost-url tab still survives.
 // ---------------------------------------------------------------------------
 {
   const stored = new Map()
@@ -520,12 +574,36 @@ function activeTabs(env, panel) {
   const env = boot({ storage: stored })
   const panel = openPanel(env)
   const tabs = env.findAll(panel, 'rsb-tab')
-  assert.equal(tabs.length, 1, 'a stored terminal tab must be dropped on re-boot')
+  assert.equal(tabs.length, 1, 'a stored terminal tab without a session id must be dropped on boot')
   const strings = []
   env.collectStrings(tabs[0], strings)
   assert.ok(strings.some((t) => t.includes('http://localhost:9')), 'the stored localhost-url tab must survive')
   assert.equal(env.findClass(panel, 'rsb-tabframe').props.src, 'http://localhost:9', 'the surviving tab becomes active')
-  console.log('no terminal restore check passed')
+  console.log('sessionless terminal drop check passed')
+}
+
+// ---------------------------------------------------------------------------
+// 6c. Closing a restored tab kills the restored session id — the dispose
+//     path must work for a tab whose shell was never spawned this boot.
+// ---------------------------------------------------------------------------
+{
+  const stored = new Map()
+  stored.set(TABS_KEY_BASE + 'session-a', JSON.stringify({
+    tabs: [{ id: 't1', type: 'terminal', ptyId: 'pty-rs9x2-7' }],
+    active: 't1',
+  }))
+  const fake = makeRemote({})
+  const env = boot({ storage: stored, remote: fake.remote })
+  env.renderDetails(startedProps)
+  const panel = openPanel(env)
+  env.findClass(panel, 'rsb-term')
+  await tick()
+  const tab = env.findAll(panel, 'rsb-tab')[0]
+  env.findClass(tab, 'rsb-tab-close').props.onClick({ stopPropagation() {} })
+  const kills = fake.methodsOf('ptyKill')
+  assert.equal(kills.length, 1, 'closing a restored tab must kill its shell immediately')
+  assert.deepEqual(kills[0].args, ['pty-rs9x2-7'], 'the kill must target the restored session id')
+  console.log('restored tab close check passed')
 }
 
 // ---------------------------------------------------------------------------
@@ -560,6 +638,110 @@ function activeTabs(env, panel) {
   assert.ok(fallbackStrings.join('').includes('shell-ready'), 'output must still stream while xterm cannot attach')
   assert.ok(env.stylesheet.includes('.rsb-term'), 'the terminal surface rules must ship in the plugin stylesheet')
   console.log('vendored xterm capture check passed')
+}
+
+// ---------------------------------------------------------------------------
+// 8. Per-session tab persistence includes terminal session ids (ticket #9):
+//    once the shell spawns, the tab entry gains the host PTY session id —
+//    that stored id is what the next boot re-attaches to. Each tab binds its
+//    own id to its own entry.
+// ---------------------------------------------------------------------------
+{
+  const { env, fake, panel } = await bootWithTerminal({
+    spawns: [
+      { ok: true, value: { id: 'pty-b1-1', pid: 4242 } },
+      { ok: true, value: { id: 'pty-b1-2', pid: 4243 } },
+    ],
+  })
+  let current = pickTerminal(env, panel)
+  env.findClass(current, 'rsb-term')
+  await tick()
+
+  const key = TABS_KEY_BASE + 'session-a'
+  let saved = JSON.parse(env.storage.get(key))
+  assert.equal(saved.tabs.length, 1, 'one terminal tab must be stored before the second is picked')
+  assert.equal(saved.tabs[0].ptyId, 'pty-b1-1', 'the spawned session id must persist into the stored tab entry')
+
+  current = pickTerminal(env, current)
+  // The vm harness keys hook state by component function, so the second
+  // tab (same TerminalTab function, new React key in the real DOM) needs a
+  // fresh instance for its mount effect to run — same shape as the remount
+  // simulation in section 2.
+  const term2 = env.findTerminalTabElement(current)
+  env.remount(term2.type)
+  env.findClass(current, 'rsb-term')
+  await tick()
+  saved = JSON.parse(env.storage.get(key))
+  assert.equal(saved.tabs.length, 2, 'two terminal tabs must be stored')
+  assert.equal(saved.tabs[1].ptyId, 'pty-b1-2', 'each tab must bind its own spawned session id')
+  assert.equal(saved.tabs[0].ptyId, 'pty-b1-1', 'the first tab keeps its own session id')
+  assert.equal(fake.methodsOf('ptySpawn').length, 2, 'binding must not re-spawn — one shell per tab')
+  console.log('terminal session id persistence check passed')
+}
+
+// ---------------------------------------------------------------------------
+// 9. Dead-session placeholder (ticket #9): session ids are boot-unique, so a
+//    pull failing with "unknown pty session" means the host restarted and
+//    the shell is gone. A restored tab then renders the placeholder instead
+//    of a broken terminal; a live tab whose host restarts mid-session flips
+//    to it too. Any other pull failure stays the plain error box.
+// ---------------------------------------------------------------------------
+{
+  const stored = new Map()
+  stored.set(TABS_KEY_BASE + 'session-a', JSON.stringify({
+    tabs: [{ id: 't1', type: 'terminal', ptyId: 'pty-old-1' }],
+    active: 't1',
+  }))
+  const fake = makeRemote({})
+  const env = boot({ storage: stored, remote: fake.remote })
+  env.renderDetails(startedProps)
+  const panel = openPanel(env)
+  env.findClass(panel, 'rsb-term')
+  await tick()
+  assert.equal(fake.methodsOf('ptySpawn').length, 0, 'a restored tab never respawns on its own')
+
+  // The pull comes back "unknown pty session": the host was restarted.
+  fake.pullWaiters[0].resolve({ ok: false, error: { message: 'dsh-sidebar: unknown pty session: pty-old-1' } })
+  await tick()
+  const after = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
+  assert.equal(fake.methodsOf('ptyPull').length, 1, 'the loop must stop once the session is known dead')
+  const dead = env.findClass(after, 'rsb-term-dead')
+  assert.ok(dead, 'a restored tab whose session is gone must render the dead-session placeholder')
+  assert.equal(env.findClass(after, 'rsb-error'), null, 'the placeholder is not an error box')
+  const strings = []
+  env.collectStrings(dead, strings)
+  assert.ok(strings.join('').includes('Terminal session ended'), 'the placeholder must say the session ended')
+  assert.ok(env.stylesheet.includes('.rsb-term-dead'), 'the placeholder must ship styled')
+  console.log('dead-session placeholder check passed')
+}
+
+// A tab that was live before the restart flips to the placeholder as well.
+{
+  const { env, fake, panel } = await bootWithTerminal({ spawn: { ok: true, value: { id: 'pty-live-1', pid: 4242 } } })
+  const current = pickTerminal(env, panel)
+  env.findClass(current, 'rsb-term')
+  await tick()
+  fake.pullWaiters[0].resolve({ ok: true, value: { seq: 1, chunk: 'before-restart', alive: true } })
+  await tick()
+  fake.pullWaiters[1].resolve({ ok: false, error: { message: 'dsh-sidebar: unknown pty session: pty-live-1' } })
+  await tick()
+  const after = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
+  assert.ok(env.findClass(after, 'rsb-term-dead'), 'a live tab whose host restarted must flip to the placeholder')
+  console.log('live tab restart flip check passed')
+}
+
+// Any other pull failure keeps the plain error box.
+{
+  const { env, fake, panel } = await bootWithTerminal({ spawn: { ok: true, value: { id: 'pty-live-1', pid: 4242 } } })
+  const current = pickTerminal(env, panel)
+  env.findClass(current, 'rsb-term')
+  await tick()
+  fake.pullWaiters[0].resolve({ ok: false, error: { message: 'the channel dropped' } })
+  await tick()
+  const after = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
+  assert.ok(env.findClass(after, 'rsb-error'), 'a non-session pull failure must stay an error box')
+  assert.equal(env.findClass(after, 'rsb-term-dead'), null, 'a non-session failure must not render the placeholder')
+  console.log('pull error passthrough check passed')
 }
 
 console.log('Terminal tab check passed')

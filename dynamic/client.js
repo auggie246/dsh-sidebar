@@ -185,10 +185,12 @@ const XTERM = (function () {
     }
     // Per-type Panel Tab seam: one entry per tab type. identity maps a tab
     // to its dedupe key, restore rebuilds a tab from persisted storage
-    // state (null drops the entry), render returns the content children of
-    // .rsb-tabcontent while the tab is active, dispose releases per-tab
-    // resources when the tab closes. A type this build does not know is
-    // dropped from storage, so a tab it cannot render never comes back.
+    // state (null drops the entry), render(tab, panel) returns the content
+    // children of .rsb-tabcontent while the tab is active (panel carries
+    // the owning Panel's hooks: bindSession records a terminal tab's host
+    // PTY session id, ticket #9), dispose releases per-tab resources when
+    // the tab closes. A type this build does not know is dropped from
+    // storage, so a tab it cannot render never comes back.
       // Terminal sessions (ticket #8, ADR 0002): one entry per open terminal
       // tab, keyed by tab id and holding the host-side PTY session id. The
       // map lives for the page's lifetime, so a tab switch away and back
@@ -257,11 +259,18 @@ const XTERM = (function () {
       },
       [TAB_TYPE_TERMINAL]: {
         // Terminals never dedupe: every tab owns its own shell, so the
-        // tab id is the identity. No restore on purpose — the PTY session
-        // lives in the host process and dies with the page, so a stored
-        // terminal tab is dropped on boot; re-attach is ticket #9.
+        // tab id is the identity. Reload re-attach (ticket #9): a stored
+        // entry carries the host PTY session id, so the tab restores and
+        // re-attaches to its live shell — the ring buffer replays the
+        // scrollback from seq 0. An entry without a session id cannot
+        // re-attach and is dropped. Session ids are boot-unique, so a
+        // stored id can never attach to a later boot's shell.
         identity(tab) { return tab.id },
-        render(tab) { return [h(TerminalTab, { key: tab.id, tab })] },
+        restore(entry) {
+          if (typeof entry.ptyId !== 'string' || !entry.ptyId.trim()) return null
+          return { id: typeof entry.id === 'string' && entry.id ? entry.id : newTabId(), type: TAB_TYPE_TERMINAL, ptyId: entry.ptyId.trim() }
+        },
+        render(tab, panel) { return [h(TerminalTab, { key: tab.id, tab: tab, bindSession: panel ? panel.bindSession : null })] },
         strip(tab) { return { title: 'Terminal', label: 'Terminal' } },
         // Closing a Terminal tab kills its shell immediately, with no
         // confirmation: closeTab invokes this synchronously.
@@ -918,6 +927,9 @@ const XTERM = (function () {
 
     function TerminalTab(props) {
       const tab = (props && props.tab) || {}
+      // Panel hook (ticket #9): records the spawned session id into the
+      // tab list and its storage blob, so the next boot can re-attach.
+      const bindSession = (props && props.bindSession) || null
       // Instance state (never React state): the pull loop and the resize
       // machinery live on `inst`, and `inst.dead` is set by the effect
       // cleanup so the loop stops when the tab unmounts or closes.
@@ -926,6 +938,10 @@ const XTERM = (function () {
         charW: 0, charH: 0, cols: 0, rows: 0,
       }))
       const [err, setErr] = React.useState('')
+      // Dead-session state (ticket #9): set when a pull reports an
+      // unknown session — with boot-unique ids that means the host
+      // restarted and this shell is gone.
+      const [ended, setEnded] = React.useState(false)
       const [attached, setAttached] = React.useState(false)
       const [out, setOut] = React.useState('')
 
@@ -1016,7 +1032,13 @@ const XTERM = (function () {
             pull = await host.call('ptyPull', { id: session.ptyId, afterSeq: afterSeq })
             if (!pull || !pull.ok) throw new Error((pull && pull.error) || 'ptyPull failed')
           } catch (e) {
-            if (!inst.dead) setErr(String((e && e.message) || e))
+            if (inst.dead) return
+            const message = String((e && e.message) || e)
+            // Ticket #9: session ids are boot-unique, so "unknown pty
+            // session" means the host restarted and this shell is gone —
+            // the dead-session placeholder replaces the broken terminal.
+            if (/unknown pty session/.test(message)) setEnded(true)
+            else setErr(message)
             return
           }
           if (inst.dead || !session.alive) return
@@ -1039,18 +1061,29 @@ const XTERM = (function () {
       React.useEffect(() => {
         inst.dead = false
         async function start() {
-          // Ensure a session: spawn on first mount, reuse on remounts.
+          // Ensure a session: spawn on first mount, reuse the live session
+          // on remounts, and re-attach after a page reload (ticket #9):
+          // the persisted tab carries the host PTY session id and the
+          // pull loop replays the ring buffer from seq 0.
           let session = terminalSessions.get(tab.id)
           if (!session) {
-            let spawn = null
-            try {
-              spawn = await host.call('ptySpawn', withCwd({ cols: 80, rows: 24 }))
-              if (!spawn || !spawn.ok) throw new Error((spawn && spawn.error) || 'ptySpawn failed')
-            } catch (e) {
-              if (!inst.dead) setErr(String((e && e.message) || e))
-              return
+            if (tab.ptyId) {
+              session = { ptyId: tab.ptyId, alive: true }
+            } else {
+              let spawn = null
+              try {
+                spawn = await host.call('ptySpawn', withCwd({ cols: 80, rows: 24 }))
+                if (!spawn || !spawn.ok) throw new Error((spawn && spawn.error) || 'ptySpawn failed')
+              } catch (e) {
+                if (!inst.dead) setErr(String((e && e.message) || e))
+                return
+              }
+              session = { ptyId: spawn.id, alive: true }
+              // Persistence includes terminal session ids (ticket #9):
+              // report the id once, right after the spawn, so the stored
+              // tab entry carries it from then on.
+              if (typeof bindSession === 'function') bindSession(tab.id, spawn.id)
             }
-            session = { ptyId: spawn.id, alive: true }
             terminalSessions.set(tab.id, session)
           }
           if (inst.dead) return
@@ -1067,6 +1100,14 @@ const XTERM = (function () {
         }
       }, [])
 
+      // Dead-session placeholder (ticket #9): the shell is gone (host
+      // restart), so an interactive-looking terminal would be broken.
+      if (ended) {
+        return h('div', { className: 'rsb-term-dead' },
+          h('div', { className: 'rsb-term-dead-title' }, 'Terminal session ended'),
+          h('div', { className: 'rsb-term-dead-sub' },
+            'This shell lived in the app host process. A host restart ends it. Close this tab and open a new Terminal tab.'))
+      }
       if (err) {
         return h('div', { className: 'rsb-error', role: 'alert' }, err)
       }
@@ -1099,8 +1140,12 @@ const XTERM = (function () {
       // height, so a storm of pointer events costs one layout write per
       // frame. With pointer capture the move/up events keep arriving on
       // the handle after the pointer leaves the strip; losing capture
-      // ends the drag like a release would.
-      const [inst] = React.useState(() => ({ dragging: false, startY: 0, startH: 0, pendingY: null, raf: 0 }))
+      // ends the drag like a release would. `tabs` is published here each
+      // render (the SidebarPanel cwd-store pattern) so a terminal tab's
+      // bindSession callback can read the current list without going
+      // stale.
+      const [inst] = React.useState(() => ({ dragging: false, startY: 0, startH: 0, pendingY: null, raf: 0, tabs: null }))
+      inst.tabs = tabs
       React.useEffect(() => {
         if (typeof document === 'undefined') return () => {}
         const overlayEl = document.querySelector('[data-shell-overlay]')
@@ -1159,6 +1204,19 @@ const XTERM = (function () {
         setTabs(next)
         persistPanelTabs(sessionId, next)
       }
+      // Terminal lifecycle (ticket #9): a terminal tab reports its host
+      // PTY session id once its shell spawns; recording it into the tab
+      // entry (and the storage blob) is what lets a page reload re-attach
+      // to the live shell. A tab that closed before the spawn resolved is
+      // left alone.
+      function bindTerminalSession(tabId, ptyId) {
+        const cur = inst.tabs || tabs
+        if (!cur.tabs.some((t) => t.id === tabId && t.ptyId !== ptyId)) return
+        setAndPersistTabs({
+          tabs: cur.tabs.map((t) => (t.id === tabId ? Object.assign({}, t, { ptyId: ptyId }) : t)),
+          active: cur.active,
+        })
+      }
       // One submit either focuses the tab that already owns this URL
       // identity or appends a new tab; both paths persist.
       function submitDraftUrl() {
@@ -1201,7 +1259,7 @@ const XTERM = (function () {
       }
       function tabContentOf(tab) {
         const def = TAB_TYPES[tab.type]
-        return def && def.render ? def.render(tab) : []
+        return def && def.render ? def.render(tab, { bindSession: bindTerminalSession }) : []
       }
       if (!rect) return null
       const activeTab = tabs.tabs.find((t) => t.id === tabs.active) || null
@@ -1565,6 +1623,11 @@ const XTERM = (function () {
       // same dark surface for environments without the vendored library.
       '.rsb-term { flex: 1; min-height: 0; padding: 4px; background: #1e1e1e; }',
       '.rsb-term-fallback { flex: 1; margin: 0; padding: 8px; overflow: auto; background: #1e1e1e; color: #e6edf3; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }',
+      // Dead-session placeholder (ticket #9): the same surface, inert —
+      // the session ended when the host restarted.
+      '.rsb-term-dead { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 16px; background: #1e1e1e; color: #8b949e; text-align: center; }',
+      '.rsb-term-dead-title { font-size: 12px; font-weight: 600; color: #e6edf3; }',
+      '.rsb-term-dead-sub { font-size: 11px; line-height: 1.5; max-width: 340px; }',
     ].join('\n'))
 
     // The vendored xterm stylesheet rides the generated block: inject it

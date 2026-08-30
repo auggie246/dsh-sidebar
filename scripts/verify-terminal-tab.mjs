@@ -1,16 +1,20 @@
 #!/usr/bin/env node
 // GUI-level verification for ticket #8 (Terminal Panel Tab with vendored
-// xterm.js): the running GUI must offer Terminal in the + picker, spawn a live
-// interactive shell in the Working Repository, echo typed keystrokes through
-// the pty transport, stream output via the long-poll loop, propagate a
-// viewport resize to the PTY (stty size changes), drop terminal tabs on
-// reload (re-attach is ticket #9), and kill the shell when the tab closes.
+// xterm.js) and ticket #9 (terminal lifecycle): the running GUI must offer
+// Terminal in the + picker, spawn a live interactive shell in the Working
+// Repository, echo typed keystrokes through the pty transport, stream output
+// via the long-poll loop, propagate a viewport resize to the PTY (stty size
+// changes), re-attach the terminal tab to its live shell after a page reload
+// with the scrollback restored from the ring buffer, restore a
+// non-terminal tab untouched through the same reload, show a dead-session
+// placeholder for a restored tab whose session id the host does not know
+// (the post-restart case — boot-unique ids make "unknown pty session"
+// unambiguous), and kill the shell when the tab closes.
 //
 //   node scripts/verify-terminal-tab.mjs
 //
 // Exit 0 = every check passed. Exit 1 = any check failed.
-// Needs a started session in the GUI and a restarted `dsh web` that carries
-// the ptyResize host RPC.
+// Needs a started session in the GUI.
 
 const baseUrl = process.env.DSH_WEB_URL ?? 'http://127.0.0.1:3080'
 const chromeBin = process.env.DSH_SIDEBAR_CHROME
@@ -47,6 +51,8 @@ async function bundleMarkers() {
     ['ptyResize', 'the ptyResize RPC descriptor'],
     ['ptySpawn', 'the ptySpawn RPC descriptor'],
     ['rsb-term', 'the terminal container style'],
+    ['rsb-term-dead', 'the dead-session placeholder style (ticket #9)'],
+    ['bindSession', 'the terminal session id persistence hook (ticket #9)'],
     ['.xterm', 'the vendored xterm stylesheet rules'],
     ['GENERATED: vendored @xterm/xterm', 'the vendored xterm block'],
   ]
@@ -310,25 +316,101 @@ async function main() {
     }
     console.log(`terminal resize updates PTY cols/rows (${before} → ${after}) — OK`)
 
-    // 3. Terminal tabs are not persisted across reload (re-attach is #9);
-    //    other tab types still are.
+    // 3. Reload re-attach (ticket #9): the terminal tab persists its host
+    //    PTY session id, comes back after a page reload attached to its
+    //    live shell — the echoed marker returns from the ring buffer — and
+    //    a localhost-url tab restores untouched alongside it.
+    await evaluate(cdp, sessionId, `document.querySelector('.rsb-tabstrip-add').click()`)
+    await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-tab-picker')`, 'the type picker to open')
+    await evaluate(cdp, sessionId, `(() => {
+      const items = Array.from(document.querySelectorAll('.rsb-tab-picker-item'))
+      const at = items.findIndex((b) => (b.textContent || '').includes('Localhost URL'))
+      items[at].click()
+    })()`)
+    await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-tab-picker-form')`, 'the URL entry form to open')
+    await evaluate(cdp, sessionId, `(() => {
+      const input = document.querySelector('.rsb-tab-picker-input')
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+      setter.call(input, 'http://localhost:9')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })()`)
+    await evaluate(cdp, sessionId, `document.querySelector('.rsb-tab-picker-open').click()`)
+    await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-tabframe')`, 'the localhost-url tab to open')
+
+    const storedTerminal = await evaluate(cdp, sessionId, `(() => {
+      const key = Object.keys(localStorage).find((k) => k.indexOf('dsh.rsidebar.panels.v1.') === 0)
+      const state = key ? JSON.parse(localStorage.getItem(key)) : null
+      return state && Array.isArray(state.tabs) ? state.tabs.find((t) => t.type === 'terminal') : null
+    })()`)
+    if (!storedTerminal || typeof storedTerminal.ptyId !== 'string' || !/^pty-[a-z0-9]+-\d+$/.test(storedTerminal.ptyId)) {
+      throw new Error(`the persisted terminal tab carries no host session id (${JSON.stringify(storedTerminal)})`)
+    }
+    console.log(`terminal session id persisted (${storedTerminal.ptyId}) — OK`)
+
+    // Focus the terminal tab so it is the active one across the reload.
+    await evaluate(cdp, sessionId, `(() => {
+      const chip = Array.from(document.querySelectorAll('.rsb-tab')).find((t) => (t.textContent || '').includes('Terminal'))
+      chip.click()
+    })()`)
     await evaluate(cdp, sessionId, `location.reload()`)
     await waitFor(cdp, sessionId, `!!document.querySelector('[data-shell-overlay] .rsb-rail button')`, 'the Rail after reload', 45000)
     await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-bottom-panel')`, 'the restored open Panel', 10000)
-    await sleep(400)
-    const restoredTabs = await evaluate(cdp, sessionId, `document.querySelectorAll('.rsb-tab').length`)
-    if (restoredTabs !== 0) throw new Error(`a terminal tab came back from storage (${restoredTabs} tabs after reload)`)
-    console.log('terminal tabs are dropped from persistence on reload — OK')
+    await waitFor(cdp, sessionId, `document.querySelectorAll('.rsb-tab').length === 2`, 'both stored tabs to restore', 10000)
+    await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-term .xterm')`, 'the restored terminal to re-attach through xterm', 15000)
+    const restoredMarker = await evaluate(cdp, sessionId, `(document.querySelector('.rsb-term')?.textContent ?? '').includes('${MARKER}')`)
+    if (!restoredMarker) throw new Error('the restored terminal tab did not replay the pre-reload scrollback')
+    const placeholderAfterReload = await evaluate(cdp, sessionId, `!!document.querySelector('.rsb-bottom-panel .rsb-term-dead')`)
+    if (placeholderAfterReload) throw new Error('a live session rendered the dead-session placeholder after a plain reload')
+    console.log('page reload re-attaches the terminal tab with scrollback restored — OK')
+    // The non-terminal tab is unaffected by the same reload.
+    await evaluate(cdp, sessionId, `(() => {
+      const chip = Array.from(document.querySelectorAll('.rsb-tab')).find((t) => (t.textContent || '').includes('localhost:9'))
+      chip.click()
+    })()`)
+    await waitFor(cdp, sessionId, `(() => {
+      const frame = document.querySelector('.rsb-tabframe')
+      return !!frame && frame.src.indexOf('http://localhost:9') === 0
+    })()`, 'the restored localhost-url tab to render its iframe', 8000)
+    console.log('the non-terminal tab is unaffected by the reload — OK')
 
-    // 4. Closing a terminal tab kills its shell without confirmation.
-    await openTerminalTab(cdp, sessionId)
+    // 4. Closing a terminal tab kills its shell without confirmation; the
+    //    non-terminal tab closes the same way and the empty state returns.
+    await evaluate(cdp, sessionId, `(() => {
+      const chip = Array.from(document.querySelectorAll('.rsb-tab')).find((t) => (t.textContent || '').includes('Terminal'))
+      chip.querySelector('.rsb-tab-close').click()
+    })()`)
+    await waitFor(cdp, sessionId, `document.querySelectorAll('.rsb-tab').length === 1`, 'the terminal tab to vanish on close', 8000)
     await evaluate(cdp, sessionId, `document.querySelector('.rsb-tab .rsb-tab-close').click()`)
     await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-panel-empty')`, 'the empty state to return')
     const noConfirm = await evaluate(cdp, sessionId, `!!document.querySelector('.rsb-tab')`)
-    if (noConfirm) throw new Error('the terminal tab survived its close click')
+    if (noConfirm) throw new Error('a tab survived its close click')
     console.log('closing the terminal tab kills it immediately, no confirmation — OK')
 
-    console.log('PASS: the Terminal Panel Tab spawns, streams, resizes, and closes end to end in the GUI')
+    // 5. Dead-session placeholder (ticket #9): a restored terminal tab whose
+    //    session id the host does not know — exactly what a `dsh web`
+    //    restart leaves behind, since ids are boot-unique — renders the
+    //    placeholder instead of a broken terminal. The stored id is pointed
+    //    at a session no running host can own.
+    await openTerminalTab(cdp, sessionId)
+    await evaluate(cdp, sessionId, `(() => {
+      const key = Object.keys(localStorage).find((k) => k.indexOf('dsh.rsidebar.panels.v1.') === 0)
+      const state = JSON.parse(localStorage.getItem(key))
+      const tab = state.tabs.find((t) => t.type === 'terminal')
+      tab.ptyId = 'pty-goneboot-9'
+      state.active = tab.id
+      localStorage.setItem(key, JSON.stringify(state))
+    })()`)
+    await evaluate(cdp, sessionId, `location.reload()`)
+    await waitFor(cdp, sessionId, `!!document.querySelector('[data-shell-overlay] .rsb-rail button')`, 'the Rail after reload', 45000)
+    await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-bottom-panel')`, 'the Panel after reload', 10000)
+    await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-bottom-panel .rsb-term-dead')`, 'the dead-session placeholder to render', 10000)
+    const deadText = await evaluate(cdp, sessionId, `document.querySelector('.rsb-bottom-panel .rsb-term-dead')?.textContent ?? ''`)
+    if (!deadText.includes('Terminal session ended')) throw new Error(`the placeholder must say the session ended (got: ${JSON.stringify(deadText)})`)
+    const brokenSurface = await evaluate(cdp, sessionId, `!!document.querySelector('.rsb-bottom-panel .rsb-term') || !!document.querySelector('.rsb-bottom-panel .rsb-error')`)
+    if (brokenSurface) throw new Error('the dead session must not render a terminal surface or an error box')
+    console.log('a restored tab with an unknown session id shows the dead-session placeholder — OK')
+
+    console.log('PASS: the Terminal Panel Tab spawns, streams, resizes, re-attaches across reloads, shows dead-session placeholders, and closes end to end in the GUI')
     process.exitCode = 0
   } finally {
     if (ws) try { ws.close() } catch {}

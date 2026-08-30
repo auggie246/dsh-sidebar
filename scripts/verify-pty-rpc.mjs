@@ -72,8 +72,8 @@ console.log(`mode: wire (live POST ${baseUrl}/api/rsidebarGit/pty*)`)
 const cwd = process.cwd()
 const spawned = await invoke('ptySpawn', { cwd, cols: 80, rows: 24 })
 ptyId = spawned.id
-if (typeof ptyId !== 'string' || !/^pty-\d+$/.test(ptyId)) {
-  fail(`ptySpawn returned an unexpected id ${JSON.stringify(spawned.id)}`)
+if (typeof ptyId !== 'string' || !/^pty-[a-z0-9]+-\d+$/.test(ptyId)) {
+  fail(`ptySpawn returned an unexpected id ${JSON.stringify(spawned.id)} (expected pty-<boot nonce>-<counter>, ticket #9)`)
 }
 if (!Number.isFinite(spawned.pid) || spawned.pid <= 0) {
   fail(`ptySpawn returned an unexpected pid ${JSON.stringify(spawned.pid)}`)

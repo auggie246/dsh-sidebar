@@ -42,6 +42,11 @@ return {
     const PULL_HOLD_MS = 1000
     const terminals = new Map()
     let ptyCounter = 0
+    // Ticket #9: session ids embed a per-boot nonce. A page reload carries
+    // tab-persisted ids back to this host, so ids must stay unique across
+    // host restarts — a plain counter would let a restored tab re-attach to
+    // a later boot's pty-1, and a dead session would look like a live one.
+    const ptyBoot = Math.random().toString(36).slice(2, 8)
 
     function ptySize(value, label) {
       if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(label + ' must be a finite number')
@@ -300,7 +305,7 @@ return {
           graceMs: 2000,
         })
         ptyCounter += 1
-        const session = { id: 'pty-' + ptyCounter, handle: handle, chunks: [], bytes: 0, seq: 0, waiters: new Set(), alive: true, pending: null }
+        const session = { id: 'pty-' + ptyBoot + '-' + ptyCounter, handle: handle, chunks: [], bytes: 0, seq: 0, waiters: new Set(), alive: true, pending: null }
         terminals.set(session.id, session)
         handle.output.on('data', (chunk) => appendChunk(session, chunk))
         // The stream ends after the terminal's queued output, so this wake is

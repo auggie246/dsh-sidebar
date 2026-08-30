@@ -61,11 +61,11 @@ for (const [method, params, resultSymbol] of [
 // ---------------------------------------------------------------------------
 
 const effects = []
-const provided = new Map()
 const repoRoot = realpathSync(mkdtempSync(join(tmpdir(), 'rsb-pty-')))
 execFileSync('git', ['init', repoRoot], { stdio: 'ignore' })
 
 function makeCtx(workspaceRoot) {
+  const provided = new Map()
   const ctx = {
     get(name) { return name === 'sandboxPolicy' ? { workspaceRoot } : undefined },
     effect(fn) {
@@ -83,22 +83,25 @@ function makeCtx(workspaceRoot) {
     },
     typert: {},
   }
-  return ctx
+  return { ctx, provided }
 }
 
-const ctx = makeCtx(repoRoot)
+const boot1 = makeCtx(repoRoot)
+const ctx = boot1.ctx
 const { LocalSubprocessRuntime } = await import(`${DSH_ROOT}/node_modules/@deepseek-ai/dsh-subprocess-local/lib/index.js`)
 const subprocess = new LocalSubprocessRuntime(ctx)
 ctx.subprocess = subprocess
 
 apply(ctx)
-const gateway = provided.get('rsidebarGit')
+const gateway = boot1.provided.get('rsidebarGit')
 assert.ok(gateway, 'apply must mount the rsidebarGit gateway into the context registry')
 for (const method of ['ptySpawn', 'ptyWrite', 'ptyPull', 'ptyKill']) {
   assert.equal(typeof gateway[method], 'function', `gateway must expose ${method}`)
 }
 
 const spawnedIds = []
+const rebootedIds = []
+let gateway2 = null
 async function spawnPty(cwd, cols = 80, rows = 24) {
   const result = await gateway.ptySpawn(cwd, cols, rows)
   spawnedIds.push(result.id)
@@ -160,7 +163,7 @@ try {
   // ------------------------------------------------------------------
   const main = await spawnPty(repoRoot, 80, 24)
   assert.equal(typeof main.id, 'string', 'ptySpawn must return a string id')
-  assert.match(main.id, /^pty-\d+$/, 'session id must be pty-<counter>')
+  assert.match(main.id, /^pty-[a-z0-9]+-\d+$/, 'session id must be pty-<boot nonce>-<counter> (ticket #9: unique across boots)')
   assert.ok(Number.isFinite(main.pid) && main.pid > 0, 'ptySpawn must return a real pid')
   let pidAlive = true
   try { process.kill(main.pid, 0) } catch { pidAlive = false }
@@ -322,6 +325,29 @@ try {
   await pullUntil(sized.id, beforeResize.seq, '\n40 120')
   await gateway.ptyKill(sized.id)
   console.log('ptyResize check passed (stty size 24 80 → 40 120)')
+
+  // ------------------------------------------------------------------
+  // 8. Session ids are unique across host boots (ticket #9): a page reload
+  //    carries the stored tab ids back to the host, so a new boot must
+  //    never reuse an old boot's id — otherwise a restored tab could
+  //    re-attach to a later boot's shell, and a dead session would be
+  //    indistinguishable from a live one. A second apply() stands in for a
+  //    restart: ids differ, and each boot's ids are unknown to the other.
+  // ------------------------------------------------------------------
+  const boot2 = makeCtx(repoRoot)
+  boot2.ctx.subprocess = subprocess
+  apply(boot2.ctx)
+  gateway2 = boot2.provided.get('rsidebarGit')
+  assert.ok(gateway2, 'a second boot must mount its own gateway')
+  const rebooted = await gateway2.ptySpawn(repoRoot, 80, 24)
+  rebootedIds.push(rebooted.id)
+  assert.notEqual(rebooted.id, main.id, 'a new boot must never reuse a previous boot session id')
+  await assert.rejects(() => gateway2.ptyPull(main.id, 0), /unknown pty session/,
+    'a previous boot id must be unknown after restart — that is the dead-session signal')
+  await assert.rejects(() => gateway.ptyPull(rebooted.id, 0), /unknown pty session/,
+    'the current boot must not know another boot id either')
+  await gateway2.ptyKill(rebooted.id)
+  console.log(`cross-boot id check passed (${main.id} vs ${rebooted.id})`)
 } catch (error) {
   if (/posix_openpt|openpty|out of pty/i.test(String(error && error.message))) {
     console.error('test-pty-transport: PTY allocation was denied by the execution sandbox '
@@ -329,6 +355,9 @@ try {
   }
   throw error
 } finally {
+  for (const id of rebootedIds) {
+    try { if (gateway2) await gateway2.ptyKill(id) } catch {}
+  }
   for (const id of spawnedIds) {
     try { await gateway.ptyKill(id) } catch {}
   }
