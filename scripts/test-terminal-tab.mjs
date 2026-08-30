@@ -641,6 +641,28 @@ function activeTabs(env, panel) {
 }
 
 // ---------------------------------------------------------------------------
+// 7b. The nerd-icon face ships embedded (ADR 0004): the
+//     stylesheet carries the data-URI @font-face and the xterm font stack
+//     leads with it, so p10k prompt icons render as glyphs — not tofu
+//     hexboxes — on machines with no Nerd Font installed.
+// ---------------------------------------------------------------------------
+{
+  const env = boot()
+  const face = env.stylesheet.includes('@font-face { font-family: "Dsh Sidebar Icons";')
+    && env.stylesheet.includes('data:font/woff2;base64,')
+    && env.stylesheet.includes('unicode-range: U+E000-F8FF;')
+  assert.ok(face, 'the icon face must ship embedded in the plugin stylesheet')
+  const stack = /const TERM_FONT_FAMILY = '([^']*)'/.exec(source)
+  assert.ok(stack, 'the terminal font stack constant must exist')
+  assert.match(
+    stack[1],
+    /^"Dsh Sidebar Icons", ui-monospace, SFMono-Regular, Menlo, monospace$/,
+    'the xterm font stack must lead with the embedded icon face and fall through to the system stack'
+  )
+  console.log('embedded nerd-icon face check passed')
+}
+
+// ---------------------------------------------------------------------------
 // 8. Per-session tab persistence includes terminal session ids (ticket #9):
 //    once the shell spawns, the tab entry gains the host PTY session id —
 //    that stored id is what the next boot re-attaches to. Each tab binds its

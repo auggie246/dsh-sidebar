@@ -2,9 +2,9 @@
 // Panel tab strip check (ticket #5): the open Panel renders a tab strip
 // header row with an empty state while no Panel Tabs exist; the + affordance
 // is live since ticket #6 (its full behavior is covered by
-// test-panel-tabs.mjs). The Panel and its Rail button stay hidden/inert
-// before the session starts — the same startedSession gate the Rail already
-// uses — and come alive after.
+// test-panel-tabs.mjs). ADR 0003 ungates the Panel: the Rail button is live
+// as soon as a session exists — blank or started — and stays inert only with
+// no session at all.
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import vm from 'node:vm'
@@ -198,7 +198,16 @@ const startedProps = {
     return selector({ items: [{ path: '/workspace/a', sessionIds: ['session-a'] }] })
   },
 }
-const blankProps = {
+const blankSessionProps = {
+  sessionId: 'session-b',
+  useSessions(selector) {
+    return selector({ current: 'session-b', byId: { 'session-b': { blank: true } } })
+  },
+  useWorkspaces(selector) {
+    return selector({ items: [{ path: '/workspace/b', sessionIds: ['session-b'] }] })
+  },
+}
+const noSessionProps = {
   sessionId: undefined,
   useSessions(selector) {
     return selector({ current: undefined, byId: {} })
@@ -242,38 +251,51 @@ const blankProps = {
   assert.match(env.stylesheet, /\.rsb-tab-picker \{[^}]*position: absolute/, 'the type picker must float over the Panel content')
 }
 
-// 2. Before the session starts the Panel and its Rail button are inert.
+// 2. ADR 0003: the Panel button is live on a blank session — a fresh
+//    session may host a terminal before its first message.
 {
   const env = boot()
-  const tree = env.render(blankProps)
+  const tree = env.render(blankSessionProps)
   const rail = env.findClass(tree, 'rsb-rail')
   const buttons = railButtons(rail)
-  assert.equal(buttons.length, 2, 'the Rail keeps both buttons before the session starts')
-  assert.equal(buttons[1].props.disabled, true, 'the Panel Rail button must be inert before the session starts')
-  assert.equal(buttons[1].props.title, 'Panel opens once the session starts', 'the inert button must say why')
+  assert.equal(buttons.length, 2, 'the Rail keeps both buttons on a blank session')
+  assert.equal(buttons[1].props.disabled, undefined, 'the Panel Rail button must be live on a blank session')
+  assert.equal(buttons[1].props.title, 'Open panel', 'the live button offers to open the Panel')
   assert.equal(buttons[1].props['aria-pressed'], 'false')
   buttons[1].props.onClick()
-  env.render(blankProps)
-  assert.equal(env.findClass(env.render(blankProps), 'rsb-bottom-panel'), null, 'clicking the inert button must not open the Panel')
+  env.findClass(env.render(blankSessionProps), 'rsb-bottom-panel') // mount pass; null while rect fills
+  const panel = env.findClass(env.render(blankSessionProps), 'rsb-bottom-panel')
+  assert.ok(panel, 'clicking the button must open the Panel on a blank session')
 }
 
-// 3. A Panel left open in storage stays hidden until the session starts, and
-//    appears once it does (the same gate the Rail applies on mount).
+// 2b. With no session at all the Panel button stays inert and says why.
+{
+  const env = boot()
+  const buttons = railButtons(env.findClass(env.render(noSessionProps), 'rsb-rail'))
+  assert.equal(buttons.length, 2, 'the Rail keeps both buttons with no session')
+  assert.equal(buttons[1].props.disabled, true, 'the Panel Rail button must be inert with no session')
+  assert.equal(buttons[1].props.title, 'Panel opens once a session exists', 'the inert button must say why')
+  assert.equal(buttons[1].props['aria-pressed'], 'false')
+  buttons[1].props.onClick()
+  assert.equal(env.findClass(env.render(noSessionProps), 'rsb-bottom-panel'), null, 'clicking the inert button must not open the Panel')
+}
+
+// 3. A Panel left open in storage appears as soon as a session exists —
+//    blank or started (the same gate the Rail applies on mount).
 {
   const storage = new Map()
   storage.set(PANEL_KEY, JSON.stringify({ sidebarOpen: false, panelOpen: true, panelHeight: 240 }))
   const env = boot({ storage })
-  assert.equal(env.findClass(env.render(blankProps), 'rsb-bottom-panel'), null, 'a restored open Panel must stay hidden before the session starts')
-  assert.equal(env.findClass(env.render(blankProps), 'rsb-bottom-panel'), null, 'still hidden on the second render')
-  assert.equal(railButtons(env.findClass(env.render(blankProps), 'rsb-rail'))[1].props.disabled, true, 'the Rail button stays inert before the session starts')
+  env.findClass(env.render(blankSessionProps), 'rsb-bottom-panel') // mount pass; null while rect fills
+  const panel = env.findClass(env.render(blankSessionProps), 'rsb-bottom-panel')
+  assert.ok(panel, 'a restored open Panel must appear on a blank session')
+  assert.equal(railButtons(env.findClass(env.render(blankSessionProps), 'rsb-rail'))[1].props.disabled, undefined, 'the Rail button is live on a blank session')
+  assert.equal(railButtons(env.findClass(env.render(blankSessionProps), 'rsb-rail'))[1].props.title, 'Close panel', 'the live button reflects the open Panel')
 
-  env.findClass(env.render(startedProps), 'rsb-bottom-panel') // mount pass; null while rect fills
-  const panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
-  assert.ok(panel, 'the restored Panel must appear once the session starts')
-  const buttons = railButtons(env.findClass(env.render(startedProps), 'rsb-rail'))
-  assert.equal(buttons[1].props.disabled, undefined, 'the Rail button must be live after the session starts')
-  assert.equal(buttons[1].props.title, 'Close panel', 'the live button reflects the open Panel')
-  assert.ok(env.findClass(panel, 'rsb-tabstrip'), 'the restored Panel carries the tab strip')
+  env.findClass(env.render(startedProps), 'rsb-bottom-panel') // mount pass; the session start remounts the Panel
+  const startedPanel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
+  assert.ok(startedPanel, 'the restored Panel stays through the session start')
+  assert.ok(env.findClass(startedPanel, 'rsb-tabstrip'), 'the restored Panel carries the tab strip')
 }
 
 console.log('Panel tab strip check passed')

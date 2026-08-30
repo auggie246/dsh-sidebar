@@ -199,6 +199,19 @@ try {
   console.log('ptyWrite/ptyPull check passed')
 
   // ------------------------------------------------------------------
+  // 2b. TERM reaches the shell as a real terminal type (ADR 0003): the
+  //     spawn argv prepends `env TERM=xterm-256color`, because
+  //     dsh-subprocess-local hard-codes name: 'dumb' and an env override
+  //     loses that race inside node-pty.
+  // ------------------------------------------------------------------
+  seq = await drain(main.id, seq, 2)
+  await gateway.ptyWrite(main.id, 'echo TERM=$TERM\n')
+  const termSeen = await pullUntil(main.id, seq, 'xterm-256color')
+  seq = termSeen.seq
+  assert.ok(termSeen.text.includes('TERM=xterm-256color'), 'the shell must see TERM=xterm-256color, not dumb')
+  console.log('TERM argv check passed')
+
+  // ------------------------------------------------------------------
   // 3. Idle pull holds ~1s; pull with output arriving resolves promptly
   // ------------------------------------------------------------------
   seq = await drain(main.id, seq, 2)
@@ -317,12 +330,15 @@ try {
   //    the shell must observe the new size through stty.
   // ------------------------------------------------------------------
   const sized = await spawnPty(repoRoot, 80, 24)
-  // stty size prints at line start, so the needles anchor on the newline.
+  // The needle cannot anchor on a newline (ADR 0004): with TERM fixed, p10k
+  // redraws its prompt between the echoed command and stty's output, and
+  // that redraw carries no trailing newline. The shell is fresh, so its
+  // buffer holds no other "24 80".
   await gateway.ptyWrite(sized.id, 'stty size\n')
-  const beforeResize = await pullUntil(sized.id, 0, '\n24 80')
+  const beforeResize = await pullUntil(sized.id, 0, '24 80')
   await gateway.ptyResize(sized.id, 120, 40)
   await gateway.ptyWrite(sized.id, 'stty size\n')
-  await pullUntil(sized.id, beforeResize.seq, '\n40 120')
+  await pullUntil(sized.id, beforeResize.seq, '40 120')
   await gateway.ptyKill(sized.id)
   console.log('ptyResize check passed (stty size 24 80 → 40 120)')
 

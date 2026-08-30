@@ -7,10 +7,12 @@ A Git sidebar for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-har
 ## What you get
 
 - A collapsible sidebar on the right side of DSH Web
+- A bottom Panel with Panel Tabs — file preview, Markdown, and a live terminal — available as soon as a session exists
 - Source control for the active session's workspace
 - Staged, unstaged, untracked, and conflicting-file views
 - Stage, unstage, discard, commit, fetch, pull, and push actions
 - A commit graph with branches, tags, remotes, merge lanes, and infinite scrolling
+- A terminal that draws Powerlevel10k prompts correctly with no Nerd Font installed: prompt icons ship embedded in the plugin and the shell runs with `TERM=xterm-256color`
 - Per-browser controls for showing or hiding cards
 
 The sidebar uses the Git credentials already configured on the machine running `dsh web`. It does not need an API key or extra DSH settings.
@@ -101,6 +103,7 @@ Want to try the sidebar without installing it permanently? The repository includ
 - **“Not a git repository”:** open a session whose workspace is inside a Git repository.
 - **Fetch, pull, or push fails:** check that Git is installed and that the host has the required Git credentials. Pull and push also need an upstream branch.
 - **A commit fails:** make sure Git has a configured author identity and that your commit message is not empty.
+- **A prompt icon still shows as a box:** the embedded icon set covers Powerlevel10k's default icons. If your prompt configures an icon outside that set, add its codepoint to `scripts/nerd-icon-glyphs.txt` and run `npm run build:nerd-icons`.
 
 ## Uninstall
 

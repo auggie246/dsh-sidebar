@@ -1,0 +1,16 @@
+# Vendored nerd-icon subset — codepoint manifest.
+#
+# Source of truth for scripts/build-nerd-icons.mjs. One list, no spaces:
+# Unicode ranges, comma separated. Lines starting with '#' are comments.
+#
+# The list is Powerlevel10k's default icon inventory: every private-use-area
+# codepoint (U+E000-U+F8FF) that appears anywhere in the p10k theme tree
+# (~/.oh-my-zsh/custom/themes/powerlevel10k, 165 codepoints as of p10k
+# 1.20.x). Those are the glyphs a stock p10k prompt emits — the os badge
+# U+F179, the folder U+F07C, the git branch U+F113, the commit hash U+F126,
+# and every other segment icon. Anything outside U+E000-U+F8FF (prompt
+# arrows U+276F, box drawing, ASCII) renders from the system font stack and
+# stays out of this subset on purpose.
+#
+# Rebuild after editing: npm run build:nerd-icons
+E0A0-E0B3,E12C,E12E,E131-E133,E138,E168,E16C,E17C,E184,E18D,E190,E1AD,E1AE,E1C3,E1E2,E1EB,E1EC,E20E,E20F,E220,E266,E26E-E271,E608,E614,E617,E61F,E620,E624,E626,E62B,E62D,E63C,E655,E6A8,E703,E70F,E728,E729,E72D,E737,E738,E73C,E73F,E755,E757,E769,E76E,E779,E77F,E7A8,E7B1,E801,E80D,E80E,E817,E818,E821,E82F,E847,E87B,E87D,E891,E894,E895,E89C,EBD8,EBE8,F00B-F00D,F013,F015,F017,F01A-F01C,F023,F02B,F055,F059,F06A,F073,F07C,F080,F09C,F09E,F0A0,F0AC,F0AE,F0C3,F0E4,F113,F114,F126,F16B,F171,F179,F17B,F17C,F185,F188,F1BB,F1BD,F1D3,F1DA,F1DB,F1EB,F201,F217,F219,F221,F233,F240,F252,F253,F270,F27B,F291,F296,F300-F307,F309-F30A,F30C-F310,F312-F317,F319,F31B,F31D,F31F,F322,F325,F327,F32B,F32E,F331,F461,F464,F489,F49B,F4A0,F7B7,F877,F8D6
