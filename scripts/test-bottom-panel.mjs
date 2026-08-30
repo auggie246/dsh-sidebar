@@ -59,6 +59,10 @@ class ResizeObserver {
 }
 
 const styleElements = []
+// Test-controlled computed style for the measured center column: the overlay
+// Sidebar reservation is padding on that column, so cases set these to model
+// the floating strip. Defaults model the docked Sidebar (no reservation).
+let centerPaddings = { paddingLeft: '0px', paddingRight: '0px' }
 const context = {
   window: {
     __ModuleLoader__: {
@@ -69,6 +73,7 @@ const context = {
         })
       },
     },
+    getComputedStyle() { return centerPaddings },
   },
   document: {
     querySelector(selector) { return selector === '[data-shell-overlay]' ? overlayLookupResult : null },
@@ -212,6 +217,22 @@ const panelB = panelNode(overlay(props))
 assert.ok(panelB, 'the Panel must stay mounted while the center column resizes')
 assert.equal(panelB.props.style.left, '340px', 'the Panel left edge must follow the center column')
 assert.equal(panelB.props.style.width, '780px', 'the Panel width must follow the center column')
+
+// 3b. On a fresh session the Sidebar floats (ticket #1 overlay) and reserves
+//     its strip as padding-right on the same center column. The Panel must
+//     mirror the content box, so it spans the visible area and never slides
+//     underneath the floating Sidebar (ADR 0003 follow-up).
+centerCol._rect = { left: 280, right: 1180, top: 0, bottom: 900, width: 900, height: 900 }
+centerPaddings = { paddingLeft: '0px', paddingRight: '360px' }
+resizeObservers[0].callback()
+const panelC = panelNode(overlay(props))
+assert.ok(panelC, 'the Panel must stay mounted while the overlay Sidebar reserves its strip')
+assert.equal(panelC.props.style.left, '280px', 'the Panel left edge must stay at the content box left edge')
+assert.equal(panelC.props.style.width, '540px', 'the Panel width must exclude the overlay Sidebar strip (900 - 360)')
+centerPaddings = { paddingLeft: '0px', paddingRight: '0px' }
+resizeObservers[0].callback()
+const panelD = panelNode(overlay(props))
+assert.equal(panelD.props.style.width, '900px', 'docking the Sidebar again must restore the full span')
 
 // 4. While open, the center column reserves the Panel height so no
 //    conversation content is covered; the Panel and the reservation share

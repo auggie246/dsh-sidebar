@@ -219,6 +219,34 @@ async function main() {
     await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-bottom-panel')`, 'the Panel to open from the blank-session click')
     console.log('ADR 0003: Panel opened on the blank session')
 
+    // ADR 0003 follow-up: on a blank session an OPEN Sidebar floats
+    // (ticket #1 overlay) and reserves its strip as padding on the center
+    // column. The Panel must mirror the content box, so its right edge
+    // stays clear of the floating Sidebar. A fresh profile starts with the
+    // preference closed, so open it first.
+    await waitFor(cdp, sessionId, `(() => {
+      if (!window.__rsbSidebarLatch) {
+        const b = document.querySelector('[data-shell-overlay] .rsb-rail button')
+        if (b && (b.title || '').includes('Open workspace sidebar')) { window.__rsbSidebarLatch = true; b.click() }
+        return false
+      }
+      return !!document.querySelector('.rsb-overlay-panel')
+    })()`, 'the overlay Sidebar to float on the blank session', 10000)
+    await sleep(600) // let the padding-right transition and re-measure settle
+    const geometry = await evaluate(cdp, sessionId, `(() => {
+      const panel = document.querySelector('.rsb-bottom-panel')
+      const overlay = document.querySelector('.rsb-overlay-panel')
+      if (!panel || !overlay) return null
+      const p = panel.getBoundingClientRect()
+      const o = overlay.getBoundingClientRect()
+      return { panelRight: p.right, overlayLeft: o.left, clear: p.right <= o.left + 1 }
+    })()`)
+    if (!geometry) throw new Error('the Panel and the overlay Sidebar must both be present on the blank session')
+    if (!geometry.clear) {
+      throw new Error(`the Panel right edge (${geometry.panelRight}) slides under the overlay Sidebar (left edge ${geometry.overlayLeft})`)
+    }
+    console.log(`ADR 0003: Panel clear of the overlay Sidebar (panel right ${Math.round(geometry.panelRight)}, sidebar left ${Math.round(geometry.overlayLeft)})`)
+
     // --- ADR 0004a: the embedded icon face loads and actually renders p10k
     // glyphs. measureText under the shipped stack must differ from the bare
     // fallback stack for a private-use-area codepoint.
