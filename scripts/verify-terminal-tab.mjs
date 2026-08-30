@@ -145,11 +145,56 @@ async function typeText(cdp, sessionId, text) {
 }
 
 async function focusTerminal(cdp, sessionId) {
-  await evaluate(cdp, sessionId, `(() => {
-    const ta = document.querySelector('.rsb-term .xterm-helper-textarea')
-    if (!ta) return false
-    ta.focus()
-    return document.activeElement === ta
+  // A silent focus failure loses every typed keystroke into the void, which
+  // then reads as a transport failure hours downstream of the real cause.
+  // Retry until the helper textarea actually holds focus.
+  const deadline = Date.now() + 3000
+  while (Date.now() < deadline) {
+    const ok = await evaluate(cdp, sessionId, `(() => {
+      const ta = document.querySelector('.rsb-term .xterm-helper-textarea')
+      if (!ta) return false
+      ta.focus()
+      return document.activeElement === ta
+    })()`)
+    if (ok) return
+    await sleep(150)
+  }
+  const state = await evaluate(cdp, sessionId, `(() => {
+    const a = document.activeElement
+    const terms = document.querySelectorAll('.rsb-term').length
+    const helpers = document.querySelectorAll('.rsb-term .xterm-helper-textarea').length
+    const panel = document.querySelector('.rsb-bottom-panel')
+    const chips = panel ? Array.from(panel.querySelectorAll('.rsb-tab')).map((c) => (c.textContent || '').trim().slice(0, 30)) : []
+    const cls = a && a !== document.body ? a.tagName + '.' + (a.className || '').slice(0, 60) : 'body'
+    return 'terms=' + terms + ' helpers=' + helpers + ' active=' + cls + ' chips=' + JSON.stringify(chips)
+  })()`)
+  throw new Error('the xterm helper textarea never took focus — typed keystrokes would go nowhere (' + state + ')')
+}
+
+// Which terminal surface is showing, and what does it say? The error box and
+// the dead-session placeholder REPLACE .rsb-term, so a marker poll against a
+// replaced surface reads an empty string forever. Diagnoses poll failures.
+async function surfaceState(cdp, sessionId) {
+  return evaluate(cdp, sessionId, `(() => {
+    const panel = document.querySelector('.rsb-bottom-panel')
+    if (!panel) return 'no panel'
+    const err = panel.querySelector('.rsb-error')
+    if (err) return 'error box: ' + (err.textContent || '').slice(0, 200)
+    const dead = panel.querySelector('.rsb-term-dead')
+    if (dead) return 'dead placeholder: ' + (dead.textContent || '').slice(0, 120)
+    const terms = Array.from(panel.querySelectorAll('.rsb-term'))
+    const term = terms[0]
+    if (!term) return 'panel without terminal surface'
+    const text = term.textContent || ''
+    const chips = Array.from(panel.querySelectorAll('.rsb-tab')).map((c) => (c.textContent || '').trim().slice(0, 40))
+    return 'terminals=' + terms.length
+      + ' mode=' + (term.querySelector('.xterm') ? 'xterm' : (term.querySelector('.rsb-term-fallback') ? 'fallback' : 'bare'))
+      + ' chars=' + text.length
+      + ' marker=' + text.includes('${MARKER}')
+      + ' rsbsize=' + /RSBSIZE=/.test(text)
+      + ' head=' + JSON.stringify(text.slice(0, 160))
+      + ' tail=' + JSON.stringify(text.slice(-160))
+      + ' chips=' + JSON.stringify(chips)
   })()`)
 }
 
@@ -168,7 +213,7 @@ async function sttySize(cdp, sessionId) {
     if (match) return match
     await sleep(250)
   }
-  throw new Error('the RSBSIZE marker never appeared in the terminal')
+  throw new Error('the RSBSIZE marker never appeared in the terminal (surface: ' + JSON.stringify(await surfaceState(cdp, sessionId)) + ')')
 }
 
 async function openTerminalTab(cdp, sessionId) {
@@ -283,13 +328,28 @@ async function main() {
     if (gate.disabled) {
       throw new Error('the Panel Rail button is inert because the current session has not started. Start a session in the GUI, then rerun this script.')
     }
-    await evaluate(cdp, sessionId, `document.querySelector('${panelButton}').click()`)
-    await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-bottom-panel')`, 'the Panel to open')
+    // The click can land while the plugin client is still wiring the Rail
+    // button's handler; retry until the Panel actually opens.
+    let panelOpened = false
+    for (let attempt = 0; attempt < 5 && !panelOpened; attempt++) {
+      await evaluate(cdp, sessionId, `document.querySelector('${panelButton}').click()`)
+      try {
+        await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-bottom-panel')`, 'the Panel to open', 5000)
+        panelOpened = true
+      } catch (e) { /* the click raced the plugin wiring; retry */ }
+    }
+    if (!panelOpened) throw new Error('the Rail Panel button never opened the Panel after 5 attempts')
 
     // 1. The picker offers Terminal; choosing it spawns a live shell that
-    //    renders through the vendored xterm.
+    //    renders through the vendored xterm. The FIRST command is the reload
+    //    anchor: as the session's first line it sits at the very top of the
+    //    xterm buffer, so after the reload a scroll to the top must show it —
+    //    that is the restored-scrollback proof (xterm renders only the
+    //    viewport into the DOM; the buffer holds the scrollback).
     await openTerminalTab(cdp, sessionId)
     await focusTerminal(cdp, sessionId)
+    await typeText(cdp, sessionId, `echo RELOAD-ANCHOR-rsb9`)
+    await waitFor(cdp, sessionId, `(document.querySelector('.rsb-term')?.textContent ?? '').includes('RELOAD-ANCHOR-rsb9')`, 'the reload anchor to land as the first buffer line', 10000)
     await typeText(cdp, sessionId, `echo ${MARKER}`)
     const echoDeadline = Date.now() + 10000
     let sawMarker = false
@@ -318,8 +378,9 @@ async function main() {
 
     // 3. Reload re-attach (ticket #9): the terminal tab persists its host
     //    PTY session id, comes back after a page reload attached to its
-    //    live shell — the echoed marker returns from the ring buffer — and
-    //    a localhost-url tab restores untouched alongside it.
+    //    live shell — the ring buffer replays the scrollback, proven by the
+    //    anchor parked above the viewport before the reload — and a
+    //    localhost-url tab restores untouched alongside it.
     await evaluate(cdp, sessionId, `document.querySelector('.rsb-tabstrip-add').click()`)
     await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-tab-picker')`, 'the type picker to open')
     await evaluate(cdp, sessionId, `(() => {
@@ -357,11 +418,28 @@ async function main() {
     await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-bottom-panel')`, 'the restored open Panel', 10000)
     await waitFor(cdp, sessionId, `document.querySelectorAll('.rsb-tab').length === 2`, 'both stored tabs to restore', 10000)
     await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-term .xterm')`, 'the restored terminal to re-attach through xterm', 15000)
-    const restoredMarker = await evaluate(cdp, sessionId, `(document.querySelector('.rsb-term')?.textContent ?? '').includes('${MARKER}')`)
-    if (!restoredMarker) throw new Error('the restored terminal tab did not replay the pre-reload scrollback')
+    // Scrollback proof: xterm renders only the viewport into the DOM, so
+    // scroll to the very top of the restored buffer — the replayed session's
+    // first line, the pre-reload anchor, must be there. A user checking
+    // restored scrollback does exactly this.
+    try {
+      await waitFor(cdp, sessionId, `(() => {
+        const vp = document.querySelector('.rsb-term .xterm-viewport')
+        if (vp) vp.scrollTop = 0
+        return (document.querySelector('.rsb-term')?.textContent ?? '').includes('RELOAD-ANCHOR-rsb9')
+      })()`, 'the restored terminal to replay the pre-reload scrollback (scroll to top)', 10000)
+    } catch (e) {
+      throw new Error(e.message + ' (surface: ' + JSON.stringify(await surfaceState(cdp, sessionId)) + ')')
+    }
+    console.log('page reload re-attaches the terminal tab with scrollback restored — OK')
+    // Liveness proof: the restored tab is the SAME live shell — typing into
+    // it still reaches the PTY and the output comes back.
+    await focusTerminal(cdp, sessionId)
+    await typeText(cdp, sessionId, `echo POSTRELOAD-rsb9`)
+    await waitFor(cdp, sessionId, `(document.querySelector('.rsb-term')?.textContent ?? '').includes('POSTRELOAD-rsb9')`, 'the restored terminal to accept typing into its live shell', 10000)
+    console.log('typing into the restored tab reaches its live shell — OK')
     const placeholderAfterReload = await evaluate(cdp, sessionId, `!!document.querySelector('.rsb-bottom-panel .rsb-term-dead')`)
     if (placeholderAfterReload) throw new Error('a live session rendered the dead-session placeholder after a plain reload')
-    console.log('page reload re-attaches the terminal tab with scrollback restored — OK')
     // The non-terminal tab is unaffected by the same reload.
     await evaluate(cdp, sessionId, `(() => {
       const chip = Array.from(document.querySelectorAll('.rsb-tab')).find((t) => (t.textContent || '').includes('localhost:9'))
