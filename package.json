@@ -1,7 +1,7 @@
 {
   "name": "dsh-sidebar",
   "description": "Right-docked modular Sidebar for DSH Web; initial cards provide VS Code-style Source Control and a Commit Graph, with a shared Card Manifest for future cards",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "license": "MIT",
   "author": "auggie246",
@@ -33,6 +33,9 @@
     "./package.json": "./package.json"
   },
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "inject": [
         "@deepseek-ai/dsh-client-runtime"
@@ -44,6 +47,7 @@
     "lib/",
     "dynamic/",
     "scripts/",
+    "cordis.patch.yml",
     "cordis.patch.example.yml",
     "README.md",
     "LICENSE"
