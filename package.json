@@ -1,7 +1,7 @@
 {
   "name": "dsh-sidebar",
   "description": "Right-docked modular Sidebar for DSH Web; initial cards provide VS Code-style Source Control and a Commit Graph, with a shared Card Manifest for future cards",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
   "license": "MIT",
   "author": "auggie246",
