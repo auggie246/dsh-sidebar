@@ -30,6 +30,11 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
   skip with a note on machines that have no DSH checkout, instead of failing
   the suite. This keeps `pnpm test` green on CI runners.
 
+### Changed
+
+- `pnpm-lock.yaml` is now tracked, so the publish workflow's frozen CI
+  install is reproducible and supply-chain verified.
+
 ## [0.3.0] - 2026-08-30
 
 ### Added
