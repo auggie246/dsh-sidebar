@@ -371,6 +371,11 @@ const XTERM = (function () {
       const [inst] = React.useState(() => ({ seq: 0 }))
       const [data, setData] = React.useState(null)
       const [err, setErr] = React.useState('')
+      // Action failures must stay on screen: the status poll clears `err` on
+      // its next successful refresh, which used to wipe an action error
+      // within three seconds — before anyone could read it. Action errors
+      // live in their own state and clear only on the next action or a click.
+      const [actionErr, setActionErr] = React.useState('')
       const [busy, setBusy] = React.useState('')
       const [msg, setMsg] = React.useState('')
       const [confirmPath, setConfirmPath] = React.useState('')
@@ -400,16 +405,17 @@ const XTERM = (function () {
 
       async function act(method, args) {
         setBusy(method)
+        setActionErr('')
         try {
           const r = await host.call(method, withCwd(args))
           if (r && r.ok) {
             await refresh()
             return true
           }
-          setErr((r && r.error) || (method + ' failed'))
+          setActionErr((r && r.error) || (method + ' failed'))
           return false
         } catch (e) {
-          setErr(String((e && e.message) || e))
+          setActionErr(String((e && e.message) || e))
           return false
         } finally {
           setBusy('')
@@ -497,7 +503,7 @@ const XTERM = (function () {
         }),
         h('button', { className: 'rsb-commit', disabled: commitDisabled, onClick: commit },
           busy === 'commit' ? 'Committing…' : 'Commit' + (changeCount ? ' (' + changeCount + ')' : '')),
-        err ? h('div', { className: 'rsb-error', onClick: () => setErr(''), title: 'Click to dismiss' }, err) : null,
+        (actionErr || err) ? h('div', { className: 'rsb-error', onClick: () => { setActionErr(''); setErr('') }, title: 'Click to dismiss' }, actionErr || err) : null,
         group('Merge Conflicts', data.conflicts, 'conflicts'),
         group('Staged Changes', data.staged, 'staged'),
         group('Changes', data.unstaged, 'changes'),

@@ -24,10 +24,21 @@ return {
       return c.length > 0 && c[0] === '/' ? c : fallbackRoot
     }
 
+    // The controller's shell calls are direct plugin calls, so the DSH shell
+    // executor resolves them against the DEPLOYMENT sandbox policy — whose
+    // default mode is read-only, denying every write git needs. Pass a
+    // complete per-call policy scoped to the Working Repository: the user's
+    // button click is the approval, and the grant never exceeds the
+    // repository plus temp areas.
+    function repoPolicy(cwd) {
+      return { mode: 'workspace-write', workspaceRoot: cwd }
+    }
+
     async function git(cwd, args, opts) {
       const req = {
         command: 'git -C ' + shq(cwd) + ' ' + args,
         timeoutMs: opts && opts.timeoutMs ? opts.timeoutMs : 15000,
+        sandboxPolicy: repoPolicy(cwd),
       }
       if (opts && opts.stdin !== undefined) req.stdin = opts.stdin
       const res = await shell.run(shell.resolve(req))
@@ -279,7 +290,7 @@ return {
       if (!path) return { ok: false, error: 'no path given' }
       const cwd = cwdOf(args)
       if (args && args.untracked) {
-        const rm = await shell.run(shell.resolve({ command: 'rm -f -- ' + shq(path), workdir: cwd, timeoutMs: 15000 }))
+        const rm = await shell.run(shell.resolve({ command: 'rm -f -- ' + shq(path), workdir: cwd, timeoutMs: 15000, sandboxPolicy: repoPolicy(cwd) }))
         return rm.exitCode === 0 ? { ok: true } : { ok: false, error: out(rm.stderr).trim() || 'rm failed' }
       }
       let r = await git(cwd, 'restore --worktree -- ' + shq(path), { timeoutMs: 30000 })
@@ -427,7 +438,7 @@ return {
         // Confinement is re-checked on the real path: wc and cat follow
         // symlinks, so a link inside the repository pointing outside it must
         // not escape. realpath also errors on a missing file.
-        const realRes = await shell.run(shell.resolve({ command: 'realpath -- ' + shq(abs), timeoutMs: 15000 }))
+        const realRes = await shell.run(shell.resolve({ command: 'realpath -- ' + shq(abs), timeoutMs: 15000, sandboxPolicy: repoPolicy(root) }))
         if (realRes.exitCode !== 0) throw new Error(out(realRes.stderr).trim() || 'cannot read file')
         const real = out(realRes.stdout).trim()
         if (root !== '/' && real !== root && real.indexOf(root + '/') !== 0) throw new Error('path escapes the working repository')
@@ -438,12 +449,12 @@ return {
         // prints "  <size> <path>" and parseInt reads the size field. An
         // unparseable size fails closed, and the cat output is capped too,
         // so a file growing between the two probes cannot flood the channel.
-        const sizeRes = await shell.run(shell.resolve({ command: 'wc -c ' + shq(abs), timeoutMs: 15000 }))
+        const sizeRes = await shell.run(shell.resolve({ command: 'wc -c ' + shq(abs), timeoutMs: 15000, sandboxPolicy: repoPolicy(root) }))
         if (sizeRes.exitCode !== 0) throw new Error(out(sizeRes.stderr).trim() || 'cannot read file')
         const size = parseInt(out(sizeRes.stdout).trim(), 10)
         if (!Number.isFinite(size)) throw new Error('cannot measure file size')
         if (size > READ_FILE_LIMIT) throw new Error('file is larger than the 2 MB preview limit')
-        const catRes = await shell.run(shell.resolve({ command: 'cat -- ' + shq(abs), timeoutMs: 15000 }))
+        const catRes = await shell.run(shell.resolve({ command: 'cat -- ' + shq(abs), timeoutMs: 15000, sandboxPolicy: repoPolicy(root) }))
         if (catRes.exitCode !== 0) throw new Error(out(catRes.stderr).trim() || 'cannot read file')
         const content = out(catRes.stdout)
         if (content.length > READ_FILE_LIMIT) throw new Error('file is larger than the 2 MB preview limit')

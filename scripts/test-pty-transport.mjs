@@ -6,7 +6,7 @@
 // streams. The manifest/codec assertions at the top are pure and run first.
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { apply } from '../lib/index.js'
@@ -14,6 +14,13 @@ import { PtyPullResultCodec, PtySpawnResultCodec, TYPERT } from '../lib/remote.j
 
 const DSH_ROOT = process.env.DSH_ROOT
   ?? '/Users/augustine/.nvm/versions/node/v22.22.2/lib/node_modules/@deepseek-ai/dsh'
+// The transport tests import the host's runtime (subprocess-local, pty).
+// That runtime is not an npm dependency, so environments without a DSH
+// checkout — CI runners — cannot run them at all: skip instead of failing.
+if (!existsSync(DSH_ROOT)) {
+  console.log(`skipped: DSH runtime not available at ${DSH_ROOT} (set DSH_ROOT to run these checks)`)
+  process.exit(0)
+}
 const RING_LIMIT = 100 * 1024
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 

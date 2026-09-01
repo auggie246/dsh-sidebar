@@ -57,7 +57,7 @@
     "sync:vendor": "node scripts/sync-vendor.mjs",
     "build:nerd-icons": "node scripts/build-nerd-icons.mjs",
     "prepare": "npm run bundle:dynamic",
-    "test": "node --check lib/client.js && node --input-type=module --check < lib/index.js && node --input-type=module --check < lib/remote.js && node scripts/test-new-session-sidebar.mjs && node scripts/test-global-sidebar-state.mjs && node scripts/test-workspace-cwd-retention.mjs && node scripts/test-workspace-cwd-remount.mjs && node scripts/test-rail-button-bar.mjs && node scripts/test-bottom-panel.mjs && node scripts/test-panel-resize-persistence.mjs && node scripts/test-panel-tabstrip.mjs && node scripts/test-file-preview-tabs.mjs && node scripts/test-read-file-rpc.mjs && node scripts/test-panel-tabs.mjs && node scripts/test-terminal-tab.mjs && node scripts/test-pty-transport.mjs"
+    "test": "node --check lib/client.js && node --input-type=module --check < lib/index.js && node --input-type=module --check < lib/remote.js && node scripts/test-new-session-sidebar.mjs && node scripts/test-global-sidebar-state.mjs && node scripts/test-workspace-cwd-retention.mjs && node scripts/test-workspace-cwd-remount.mjs && node scripts/test-rail-button-bar.mjs && node scripts/test-bottom-panel.mjs && node scripts/test-panel-resize-persistence.mjs && node scripts/test-panel-tabstrip.mjs && node scripts/test-file-preview-tabs.mjs && node scripts/test-read-file-rpc.mjs && node scripts/test-git-sandbox-policy.mjs && node scripts/test-commit-error-persistence.mjs && node scripts/test-panel-tabs.mjs && node scripts/test-terminal-tab.mjs && node scripts/test-pty-transport.mjs"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
