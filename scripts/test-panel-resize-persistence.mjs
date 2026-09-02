@@ -256,7 +256,7 @@ function storedState(env) {
   handle.props.onPointerUp(pointerEvent(500, capturingTarget(captureLog)))
   assert.equal(lastHeight(env), '440px', 'dragging up 200px must grow the Panel from 240px to 440px')
   assert.deepEqual(captureLog, [['capture', 7], ['release', 7]], 'the drag must capture and release the pointer')
-  assert.deepEqual(storedState(env), { sidebarOpen: false, panelOpen: true, panelHeight: 440 }, 'the drag end must persist the layout state')
+  assert.deepEqual(storedState(env), { sidebarOpen: false, panelOpen: true, panelHeight: 440, sidebarWidth: 360 }, 'the drag end must persist the layout state')
 }
 
 // 2. The drag clamps at the 120px minimum when dragged far down.
@@ -345,7 +345,7 @@ function storedState(env) {
   const buttons = railButtons(rail)
   buttons[0].props.onClick() // open the Sidebar
   buttons[1].props.onClick() // open the Panel
-  assert.deepEqual(storedState(env), { sidebarOpen: true, panelOpen: true, panelHeight: 240 }, 'both toggles must persist')
+  assert.deepEqual(storedState(env), { sidebarOpen: true, panelOpen: true, panelHeight: 240, sidebarWidth: 360 }, 'both toggles must persist')
   env.findClass(env.renderStarted(), 'rsb-bottom-panel') // mount pass; null while rect fills
   const panel = env.findClass(env.renderStarted(), 'rsb-bottom-panel')
   const captureLog = []

@@ -17,6 +17,13 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
   current session to the panel, the same authority the workspaces snapshot
   matches, and the cards resolve the Working Repository from it; with no
   current session the behavior is unchanged. (#14)
+- The Sidebar keeps its size across workspaces. Switching to a session in
+  another workspace closed and re-opened the shell's Details Column, snapping
+  the docked Sidebar back to the 360px default and discarding any width the
+  user had dragged; the floating Sidebar on a fresh session had a fixed,
+  non-draggable width. The Sidebar width is now user-draggable in both modes,
+  joins Panel height in the globally stored layout state, and every session
+  switch restores the remembered width. (#15)
 
 ### Changed
 

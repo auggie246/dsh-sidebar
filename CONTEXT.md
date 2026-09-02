@@ -7,7 +7,10 @@ Glossary for the DSH right-sidebar project.
 The user-facing panel docked to the **right** of the DeepSeek Harness web GUI,
 opposite the existing left session sidebar. It is a single owner of its region
 and hosts an ordered stack of Cards. The whole Sidebar collapses to a Rail and
-re-expands from it.
+re-expands from it. Its width is a globally remembered region size (alongside
+the Panel's height): user-draggable at its left edge when floating, and
+persisted so every workspace and session — including the shell's Details
+Column resets — restores the same width.
 
 ## Sidebar Package
 
@@ -41,7 +44,9 @@ The user-facing region docked to the **bottom** of the center conversation
 column, modeled on the VS Code terminal panel. It holds an ordered strip of
 Panel Tabs and shows the active tab's content. The Panel is independent of
 the Sidebar: each has its own toggle, and both can be open at once. Its
-height is user-draggable and it closes fully, leaving no strip behind.
+height is user-draggable and it closes fully, leaving no strip behind. Its
+height, like the Sidebar's width, is a globally remembered region size:
+one browser-wide value that every workspace and session restores.
 
 ## Panel Tab
 

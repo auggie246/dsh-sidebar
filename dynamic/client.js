@@ -80,17 +80,22 @@ const XTERM = (function () {
       lsSet(VIS_KEY, JSON.stringify(cur))
     }
 
-    // ---------- layout persistence (ticket #4) ----------
-    // Sidebar open/closed, Panel open/closed, and Panel height persist in
-    // one JSON blob under dsh.rsidebar.panel.v1, following the
-    // card-visibility pattern above. Malformed or mistyped values fall
-    // back to the defaults; the height is re-clamped to the current
-    // viewport on every restore, so a height saved on a tall window
-    // cannot come back oversized.
+    // ---------- layout persistence (ticket #4, issue #15) ----------
+    // Sidebar open/closed, Sidebar width, Panel open/closed, and Panel
+    // height persist in one JSON blob under dsh.rsidebar.panel.v1,
+    // following the card-visibility pattern above. Malformed or mistyped
+    // values fall back to the defaults; the height and width are
+    // re-clamped to the current viewport on every restore, so a size
+    // saved on a larger window cannot come back oversized.
     const PANEL_KEY = 'dsh.rsidebar.panel.v1'
     const DEFAULT_PANEL_H = 240
     const PANEL_MIN_H = 120
-    const DEFAULT_PANEL_STATE = { sidebarOpen: false, panelOpen: false, panelHeight: DEFAULT_PANEL_H }
+    // The Sidebar width follows the shell's Details Column contract
+    // (300..520px) so the two never disagree about the same column.
+    const DEFAULT_SIDEBAR_W = 360
+    const SIDEBAR_MIN_W = 300
+    const SIDEBAR_MAX_W = 520
+    const DEFAULT_PANEL_STATE = { sidebarOpen: false, panelOpen: false, panelHeight: DEFAULT_PANEL_H, sidebarWidth: DEFAULT_SIDEBAR_W }
     function readPanelState() {
       const raw = lsGet(PANEL_KEY)
       if (!raw) return DEFAULT_PANEL_STATE
@@ -101,6 +106,7 @@ const XTERM = (function () {
           sidebarOpen: typeof p.sidebarOpen === 'boolean' ? p.sidebarOpen : false,
           panelOpen: typeof p.panelOpen === 'boolean' ? p.panelOpen : false,
           panelHeight: typeof p.panelHeight === 'number' && Number.isFinite(p.panelHeight) ? p.panelHeight : DEFAULT_PANEL_H,
+          sidebarWidth: typeof p.sidebarWidth === 'number' && Number.isFinite(p.sidebarWidth) ? p.sidebarWidth : DEFAULT_SIDEBAR_W,
         }
       } catch (e) { return DEFAULT_PANEL_STATE }
     }
@@ -108,11 +114,13 @@ const XTERM = (function () {
     const openStore = createStore(initialPanelState.sidebarOpen)
     const panelOpenStore = createStore(initialPanelState.panelOpen)
     const panelHeightStore = createStore(DEFAULT_PANEL_H)
+    const sidebarWidthStore = createStore(DEFAULT_SIDEBAR_W)
     function persistPanelState() {
       lsSet(PANEL_KEY, JSON.stringify({
         sidebarOpen: openStore.get() === true,
         panelOpen: panelOpenStore.get() === true,
         panelHeight: panelHeightStore.get(),
+        sidebarWidth: sidebarWidthStore.get(),
       }))
     }
     function setSidebarOpen(v) { openStore.set(v === true); persistPanelState() }
@@ -140,6 +148,117 @@ const XTERM = (function () {
       return height
     }
     applyPanelH(initialPanelState.panelHeight)
+
+    // Sidebar width (issue #15): the same story as the Panel height. The
+    // width lives in --rsb-panel-w, which the floating Sidebar, its drag
+    // handle, and the center column's reservation rule all read, so one
+    // write moves every consumer together. The viewport guard stays
+    // declarative (min(..., 100vw - 22px)) so a later window shrink
+    // cannot push the floating Sidebar off-screen without a listener.
+    function clampPanelW(v) {
+      if (typeof v !== 'number' || !Number.isFinite(v)) return DEFAULT_SIDEBAR_W
+      return Math.min(Math.max(Math.round(v), SIDEBAR_MIN_W), SIDEBAR_MAX_W)
+    }
+    function applyPanelW(v) {
+      const width = clampPanelW(v)
+      sidebarWidthStore.set(width)
+      if (typeof document !== 'undefined' && document.documentElement && document.documentElement.style
+          && typeof document.documentElement.style.setProperty === 'function') {
+        document.documentElement.style.setProperty('--rsb-panel-w', 'min(' + width + 'px, calc(100vw - 22px))')
+      }
+      return width
+    }
+    applyPanelW(initialPanelState.sidebarWidth)
+
+    // Docked-mode width follow (issue #15). When docked, the Sidebar fills
+    // the shell's Details Column, whose width the shell's transient layout
+    // store resets to 360px on every session switch (close on switch, then
+    // this plugin reopens). The shell exposes no width setter to plugins,
+    // so the follow rewrites the frame's inline grid track after the shell
+    // has committed its reopen render, and a ResizeObserver on the docked
+    // Sidebar persists widths the user drags with the shell's own Details
+    // handle. A width settled while a narrow viewport forces the shell's
+    // concession solve to shrink the column is persisted as-is — the next
+    // session switch restores the last width the user actually saw.
+    function frameElement() {
+      if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return null
+      const overlayEl = document.querySelector('[data-shell-overlay]')
+      return overlayEl && overlayEl.parentElement ? overlayEl.parentElement : null
+    }
+    // React writes the tracks as "<sidebar>px minmax(0, 1fr) <details>px";
+    // only the trailing details track is ever rewritten here.
+    const TRACKS_RE = /^(.*minmax\(0,\s*1fr\)\s+)(\d+(?:\.\d+)?)px\s*$/
+    function applyDockedWidth() {
+      if (openStore.get() !== true) return
+      const frame = frameElement()
+      if (!frame || !frame.style || typeof frame.style.getPropertyValue !== 'function'
+          || typeof frame.style.setProperty !== 'function') return
+      const match = TRACKS_RE.exec(String(frame.style.getPropertyValue('grid-template-columns') || ''))
+      if (!match) return
+      const current = Math.round(parseFloat(match[2]))
+      if (!(current > 0)) return
+      const width = clampPanelW(sidebarWidthStore.get())
+      if (current === width) return
+      frame.style.setProperty('grid-template-columns', match[1] + width + 'px')
+    }
+    function scheduleDockedWidthFollow() {
+      // Run after the shell commits the reopen render (close-on-switch
+      // fires first, then this plugin's openDetails) so the rewrite lands
+      // on top of the shell's reset instead of underneath it.
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => { requestAnimationFrame(applyDockedWidth) })
+      } else {
+        applyDockedWidth()
+      }
+    }
+    // The docked Sidebar never unmounts (the shell keeps the column's
+    // subtree mounted while closed), so each follow effect re-attaches one
+    // observer for the lifetime of the open state. Resize events carry no
+    // "user let go" signal, so persistence trails the last event by a
+    // short debounce; an immediate write would record every frame of a
+    // drag. If setTimeout is unavailable the settled width is written
+    // per event instead.
+    const dockedFollow = { observer: null, timer: null }
+    function persistDockedWidth() {
+      dockedFollow.timer = null
+      if (openStore.get() !== true) return
+      const frame = frameElement()
+      const detailsCol = frame && frame.children ? frame.children[2] : null
+      if (!detailsCol || typeof detailsCol.getBoundingClientRect !== 'function') return
+      const raw = detailsCol.getBoundingClientRect().width
+      // The shell animates its grid tracks, so a close (or a reopen reset)
+      // streams frames through the observer. Anything below the contract
+      // floor is a transient frame, never a width the user chose.
+      if (!(raw >= SIDEBAR_MIN_W)) return
+      const width = clampPanelW(raw)
+      if (width !== sidebarWidthStore.get()) {
+        sidebarWidthStore.set(width)
+        persistPanelState()
+      }
+    }
+    function watchDockedWidth() {
+      const frame = frameElement()
+      const detailsCol = frame && frame.children ? frame.children[2] : null
+      const root = detailsCol && detailsCol.children ? detailsCol.children[0] : null
+      if (!root || typeof ResizeObserver !== 'function') return
+      if (dockedFollow.observer) {
+        if (dockedFollow.observer.target === root) return
+        dockedFollow.observer.disconnect()
+        dockedFollow.observer = null
+      }
+      const observer = new ResizeObserver(() => {
+        if (dockedFollow.timer !== null && typeof clearTimeout === 'function') clearTimeout(dockedFollow.timer)
+        if (typeof setTimeout === 'function') dockedFollow.timer = setTimeout(persistDockedWidth, 250)
+        else persistDockedWidth()
+      })
+      observer.target = root
+      observer.observe(root)
+      dockedFollow.observer = observer
+    }
+    function unwatchDockedWidth() {
+      if (dockedFollow.observer) { dockedFollow.observer.disconnect(); dockedFollow.observer = null }
+      if (dockedFollow.timer !== null && typeof clearTimeout === 'function') { clearTimeout(dockedFollow.timer); dockedFollow.timer = null }
+    }
 
     // ---------- Panel Tabs (ticket #6) ----------
     // A Panel holds an ordered strip of Panel Tabs (CONTEXT.md). The open
@@ -1467,6 +1586,66 @@ const XTERM = (function () {
               h('div', { className: 'rsb-panel-empty-sub' }, 'Panel tabs will appear here.')))
     }
 
+    // Floating Sidebar (new-session overlay mode). Its width lives in
+    // --rsb-panel-w (issue #15): the left-edge drag handle rewrites that
+    // variable and persists it on release — the Panel height's exact
+    // pattern — so the floating Sidebar, the center column's reservation
+    // strip, and the stored width can never drift apart. Drag state and
+    // rAF throttling mirror the Panel's top-edge handle.
+    function OverlaySidebar(props) {
+      const [inst] = React.useState(() => ({ dragging: false, startX: 0, startW: 0, pendingX: null, raf: 0 }))
+      function applyDrag() {
+        if (inst.pendingX === null) return
+        applyPanelW(inst.startW + (inst.startX - inst.pendingX))
+      }
+      function onDragStart(e) {
+        if (!e || typeof e.clientX !== 'number' || !Number.isFinite(e.clientX)) return
+        e.preventDefault()
+        inst.dragging = true
+        inst.startX = e.clientX
+        inst.startW = sidebarWidthStore.get()
+        inst.pendingX = null
+        if (e.pointerId !== undefined && e.currentTarget && typeof e.currentTarget.setPointerCapture === 'function') {
+          try { e.currentTarget.setPointerCapture(e.pointerId) } catch (err) {}
+        }
+      }
+      function onDragMove(e) {
+        if (!inst.dragging || !e || typeof e.clientX !== 'number' || !Number.isFinite(e.clientX)) return
+        inst.pendingX = e.clientX
+        if (inst.raf) return
+        const schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (fn) => { fn(); return 0 }
+        inst.raf = schedule(() => { inst.raf = 0; applyDrag() })
+      }
+      function onDragEnd(e) {
+        if (!inst.dragging) return
+        inst.dragging = false
+        if (inst.raf) {
+          if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(inst.raf)
+          inst.raf = 0
+        }
+        applyDrag()
+        inst.pendingX = null
+        if (e && e.pointerId !== undefined && e.currentTarget && typeof e.currentTarget.releasePointerCapture === 'function') {
+          try { e.currentTarget.releasePointerCapture(e.pointerId) } catch (err) {}
+        }
+        persistPanelState()
+      }
+      return h('aside', { className: 'rsb-overlay-panel' },
+        h('div', {
+          className: 'rsb-sidebar-drag',
+          title: 'Drag to resize the sidebar',
+          'aria-label': 'Resize sidebar',
+          role: 'separator',
+          'aria-orientation': 'vertical',
+          onPointerDown: onDragStart,
+          onPointerMove: onDragMove,
+          onPointerUp: onDragEnd,
+          onPointerCancel: onDragEnd,
+          onLostPointerCapture: onDragEnd,
+        }),
+        h(SidebarPanel, props))
+    }
+
     function Rail(props) {
       const open = useStore(openStore)
       const panelOpen = useStore(panelOpenStore)
@@ -1489,8 +1668,20 @@ const XTERM = (function () {
       const activeSession = activeSessionId !== undefined
       React.useEffect(() => {
         if (!startedSession || !layout) return
-        if (open) layout.openDetails()
-        else layout.closeDetails()
+        if (open) {
+          layout.openDetails()
+          // Issue #15: the shell resets the Details Column to its default
+          // width on every session switch. Re-apply the globally
+          // remembered width after the shell commits its reopen render,
+          // and keep watching the column so a width dragged with the
+          // shell's own Details handle is remembered too. The watcher is
+          // torn down whenever this effect re-runs or the Sidebar closes.
+          scheduleDockedWidthFollow()
+          watchDockedWidth()
+        } else {
+          layout.closeDetails()
+        }
+        return unwatchDockedWidth
       }, [startedSessionId, open])
       // ADR 0003 reverses the ticket #5 gate: the Panel mounts once a
       // session exists, even a blank one, so a fresh session can host a
@@ -1549,7 +1740,7 @@ const XTERM = (function () {
       // unchanged.
       return h(React.Fragment, null,
         panel,
-        h('aside', { className: 'rsb-overlay-panel' }, h(SidebarPanel, Object.assign({}, props, { sessionId: activeSessionId }))),
+        h(OverlaySidebar, Object.assign({}, props, { sessionId: activeSessionId })),
         rail)
     }
 
@@ -1571,6 +1762,12 @@ const XTERM = (function () {
       '.rsb-rail button:hover:not(:disabled) { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }',
       '.rsb-rail button:disabled { opacity: 0.4; cursor: default; }',
       '.rsb-overlay-panel { position: fixed; top: 0; right: 0; bottom: 0; z-index: 59; box-sizing: border-box; width: var(--rsb-panel-w); border-left: 1px solid var(--dsw-alias-border-l1); box-shadow: -8px 0 28px rgba(0,0,0,0.2); }',
+      // Left-edge drag handle (issue #15): a thin full-height strip that
+      // overhangs the Sidebar border for a comfortable grab zone. The
+      // width itself lives in --rsb-panel-w, which the drag handler
+      // rewrites and both the Sidebar and the reservation rule below read.
+      '.rsb-sidebar-drag { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; z-index: 2; cursor: ew-resize; touch-action: none; }',
+      '.rsb-sidebar-drag:hover { background: var(--dsw-alias-border-l2); }',
       // The shell frame hard-zeros its Details Column until a session has
       // started, so the new-session Sidebar floats in the overlay layer. The
       // frame carries data-details-collapsed in that state, and its second

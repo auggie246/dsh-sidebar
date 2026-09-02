@@ -91,7 +91,7 @@ To pin a version, append `#main`, `#v0.2.0`, or a commit SHA to the Git URL.
 
 ## Configuration and privacy
 
-There is nothing to configure. The plugin uses your existing Git credentials and configuration on the DSH Web host. Card visibility is stored only in this browser under `dsh.rsidebar.cards.v1`.
+There is nothing to configure. The plugin uses your existing Git credentials and configuration on the DSH Web host. Card visibility and layout state (Sidebar open/closed and width, Panel open/closed and height) are stored only in this browser — globally, shared by every workspace — under `dsh.rsidebar.cards.v1` and `dsh.rsidebar.panel.v1`.
 
 ## Try it for one session
 
