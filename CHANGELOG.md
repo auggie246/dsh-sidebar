@@ -6,6 +6,18 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The Sidebar works on a brand-new session. Before a session's first message
+  the Details Column is hard-zeroed and the Sidebar renders as a floating
+  overlay from a root-scoped slot, whose props carry no sessionId — so every
+  git RPC fell back to the deployment workspace root instead of the session's
+  workspace, leaving Source Control on "Not a git repository." and the Commit
+  Graph on "No commits yet.". The overlay now passes the sessions store's
+  current session to the panel, the same authority the workspaces snapshot
+  matches, and the cards resolve the Working Repository from it; with no
+  current session the behavior is unchanged. (#14)
+
 ### Changed
 
 - Commit Graph rows are leaner. The short hash no longer takes row space —
