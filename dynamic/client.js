@@ -577,6 +577,11 @@ const XTERM = (function () {
     }
 
     // ---------- Commit Graph card ----------
+    function summarizeRefs(refs) {
+      const priority = (ref) => ref.type === 'branch' ? 0 : ref.type === 'remote' && !/\/HEAD$/.test(ref.name) ? 1 : /\/HEAD$/.test(ref.name) ? 2 : 3
+      return (refs || []).slice().sort((a, b) => priority(a) - priority(b) || a.name.localeCompare(b.name))
+    }
+
     function GitGraphCard() {
       const [inst] = React.useState(() => ({ seen: new Set(), lastFp: '', busyLoading: false }))
       const [commits, setCommits] = React.useState([])
@@ -584,6 +589,7 @@ const XTERM = (function () {
       const [loading, setLoading] = React.useState(false)
       const [gerr, setGerr] = React.useState('')
       const [menu, setMenu] = React.useState(null)
+      const [refPopover, setRefPopover] = React.useState(null)
       const [copied, setCopied] = React.useState('')
       const fp = useStore(fpStore)
 
@@ -660,7 +666,16 @@ const XTERM = (function () {
       function commitRow(c, i) {
         const row = graph.rows[i]
         if (!row) return null
-        const badges = c.refs.map((r, j) => h('span', { key: 'r' + j, className: 'rsb-badge rsb-badge-' + r.type, title: r.type }, r.name))
+        const refs = summarizeRefs(c.refs)
+        const primaryRef = refs[0]
+        const refList = refs.map((r) => r.name).join('\n')
+        const refSummary = primaryRef ? h('span', { className: 'rsb-ref-summary', title: refList },
+          h('span', { className: 'rsb-badge rsb-badge-' + primaryRef.type }, primaryRef.name),
+          refs.length > 1 ? h('button', {
+            type: 'button', className: 'rsb-ref-overflow', title: refList,
+            'aria-label': 'Show ' + refs.length + ' refs',
+            onClick: (e) => { e.stopPropagation(); setRefPopover({ refs: refs, rect: e.currentTarget.getBoundingClientRect() }) },
+          }, '+' + (refs.length - 1)) : null) : null
         const avatarColor = authorColor(c.author)
         return h('div', {
           key: c.hash,
@@ -670,7 +685,7 @@ const XTERM = (function () {
         },
           svgRow(row),
           h('div', { className: 'rsb-gtext' },
-            h('div', { className: 'rsb-gsubj' }, badges, h('span', { className: 'rsb-gsubjtext' }, c.subject)),
+            h('div', { className: 'rsb-gsubj' }, refSummary, h('span', { className: 'rsb-gsubjtext' }, c.subject)),
             h('div', { className: 'rsb-gmeta' },
               h('span', { className: 'rsb-gavatar', title: c.author, style: { color: avatarColor, background: avatarColor + '2e' } }, authorInitials(c.author)),
               h('span', { className: 'rsb-gtime' }, relTime(c.time)))))
@@ -689,7 +704,10 @@ const XTERM = (function () {
         menu ? h('div', { className: 'rsb-menu-bg', onClick: () => setMenu(null), onContextMenu: (e) => { e.preventDefault(); setMenu(null) } },
           h('div', { className: 'rsb-menu', style: { left: menu.x + 'px', top: menu.y + 'px' } },
             h('button', { className: 'rsb-menu-item', onClick: () => doCopy(menu.hash, 'Hash copied') }, 'Copy commit hash'),
-            h('button', { className: 'rsb-menu-item', onClick: () => doCopy(menu.subject, 'Message copied') }, 'Copy commit message'))) : null)
+            h('button', { className: 'rsb-menu-item', onClick: () => doCopy(menu.subject, 'Message copied') }, 'Copy commit message'))) : null,
+        refPopover ? h('div', { className: 'rsb-ref-popover-bg', onClick: () => setRefPopover(null) },
+          h('div', { className: 'rsb-ref-popover', role: 'dialog', 'aria-label': 'Commit refs', style: { left: refPopover.rect.left + 'px', top: (refPopover.rect.bottom + 4) + 'px' }, onClick: (e) => e.stopPropagation() },
+            refPopover.refs.map((r, i) => h('span', { key: 'ref' + i, className: 'rsb-badge rsb-badge-' + r.type }, r.name)))) : null)
     }
 
     // ---------- manifest, panel, rail ----------
@@ -1655,7 +1673,13 @@ const XTERM = (function () {
       '.rsb-gtext { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }',
       '.rsb-gsubj { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; overflow: hidden; }',
       '.rsb-gsubjtext { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--dsw-alias-label-primary); }',
+      '.rsb-ref-summary { display: inline-flex; align-items: center; gap: 2px; flex: 0 1 auto; min-width: 0; max-width: 120px; }',
+      '.rsb-ref-summary .rsb-badge { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }',
       '.rsb-badge { font-size: 9px; padding: 0 5px; border-radius: 8px; white-space: nowrap; border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary); }',
+      '.rsb-ref-overflow { flex: 0 0 auto; border: 0; padding: 0; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 9px; cursor: pointer; }',
+      '.rsb-ref-overflow:hover, .rsb-ref-overflow:focus-visible { color: var(--dsw-alias-label-primary); text-decoration: underline; outline: none; }',
+      '.rsb-ref-popover-bg { position: fixed; inset: 0; z-index: 100; }',
+      '.rsb-ref-popover { position: fixed; z-index: 101; display: flex; flex-wrap: wrap; gap: 4px; max-width: min(300px, calc(100vw - 16px)); padding: 6px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-overlay); box-shadow: 0 8px 28px rgba(0,0,0,0.28); }',
       '.rsb-badge-branch { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }',
       '.rsb-badge-tag { border-color: var(--dsw-alias-state-warn-primary); color: var(--dsw-alias-state-warn-primary); }',
       '.rsb-badge-remote { border-color: var(--dsw-alias-state-success-primary); color: var(--dsw-alias-state-success-primary); }',

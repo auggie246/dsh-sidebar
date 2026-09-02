@@ -70,3 +70,12 @@ any reachable UI.
 The git repository a session's Cards operate on, defined as the current
 session's workspace root. When the workspace root is not a git repository,
 the Cards render a "not a git repository" empty state.
+
+## Commit Ref Summary
+
+The compact, per-row representation of Git refs in the Commit Graph. It shows
+the highest-priority ref and a `+N` overflow affordance; hovering or focusing
+shows all refs, while clicking opens an anchored informational popover. Ref
+priority is local branch, remote-tracking branch, symbolic HEAD, then tag. The
+visible ref slot is capped at 120px so the commit message remains the row's
+primary scan target.
