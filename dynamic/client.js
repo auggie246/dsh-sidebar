@@ -1541,9 +1541,15 @@ const XTERM = (function () {
           h('rect', { x: '1.5', y: '2.5', width: '13', height: '11', rx: '1.5', fill: 'none', stroke: 'currentColor' }),
           h('rect', { x: '3.5', y: '9', width: '9', height: '2.5', fill: 'currentColor' }))))
       if (!open || startedSession) return h(React.Fragment, null, panel, rail)
+      // The overlay Sidebar renders while a blank session has the Details
+      // Column hard-zeroed, so its root-scoped slot props carry no
+      // session-scoped framework sessionId. The sessions store's current
+      // session is the authority the workspaces snapshot can match; with
+      // no current session activeSessionId is undefined and behavior is
+      // unchanged.
       return h(React.Fragment, null,
         panel,
-        h('aside', { className: 'rsb-overlay-panel' }, h(SidebarPanel, props)),
+        h('aside', { className: 'rsb-overlay-panel' }, h(SidebarPanel, Object.assign({}, props, { sessionId: activeSessionId }))),
         rail)
     }
 
