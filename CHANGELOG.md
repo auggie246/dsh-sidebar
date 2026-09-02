@@ -4,6 +4,17 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Commit Graph rows are leaner. The short hash no longer takes row space —
+  the right-click menu still copies it and the hover tooltip still shows the
+  full hash. The author's username is now a fixed-width initials avatar,
+  deterministically colored per author, so long names no longer crowd the
+  subject line; the full name remains on the row tooltip and on the avatar.
+  Each row is now: subject · author initials · relative time.
+
 ## [0.3.1] - 2026-09-02
 
 ### Fixed

@@ -68,7 +68,7 @@ The card refreshes while it is visible, so branch and working-tree state stay cu
 
 ### Commit Graph
 
-The **Commit Graph** card displays commits from every local and remote ref. Scroll to load older commits. Right-click a commit to copy its hash or message.
+The **Commit Graph** card displays commits from every local and remote ref. Each row shows the subject, the author's colored initials, and the relative time; hover a row for the full author, date, and hash. Scroll to load older commits. Right-click a commit to copy its hash or message.
 
 ### Customize the sidebar
 
