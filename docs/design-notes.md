@@ -27,10 +27,14 @@ Card Manifest, Sidebar Settings, Details Column, Working Repository).
   and persist in `localStorage`. A cross-plugin card registry is a
   deliberate non-goal until a second card producer exists.
 - **Working Repository = the active session's workspace path**, resolved
-  client-side from the `details` slot's `useWorkspaces` snapshot
-  (workspace whose `sessionIds` contains the current `sessionId`) and sent
-  as `cwd` on every git call. Host-side fallback: the deployment workspace
-  root.
+  client-side from the `useWorkspaces` snapshot (workspace whose
+  `sessionIds` contains the current `sessionId`) and sent as `cwd` on every
+  git call. The current `sessionId` comes from where the Sidebar renders:
+  the framework's standard props inside the session-scoped `details` slot,
+  or — on a new/blank session, where the shell hard-zeros that column and
+  the Sidebar floats on the root-scoped `shell.overlay` slot with no
+  `sessionId` — the sessions store's current session, which the Rail passes
+  down itself (ADR 0005). Host-side fallback: the deployment workspace root.
 - **Commit behaves like VS Code SCM**: with nothing staged, Commit stages
   everything (`git add -A`) first.
 - **Two distribution forms share the codebase** (see README): a composition
