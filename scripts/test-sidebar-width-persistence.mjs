@@ -67,7 +67,7 @@ function boot(env = {}) {
     getBoundingClientRect() { return { width: this._width } },
   }
   const frameStyle = env.frameStyle || (() => {
-    const vars = new Map([['grid-template-columns', '280px minmax(0, 1fr) 360px']])
+    const vars = new Map([['grid-template-columns', '280px minmax(0px, 1fr) 360px']])
     const calls = []
     return {
       getPropertyValue(k) { return vars.get(k) || '' },
@@ -354,13 +354,15 @@ function storedState(env) {
 {
   const storage = new Map()
   storage.set(PANEL_KEY, JSON.stringify({ sidebarOpen: true, panelOpen: false, panelHeight: 240, sidebarWidth: 480 }))
-  const env = boot({ storage, deferredRaf: true })
+  // React's authored form (minmax(0, 1fr)) — the browser normalizes the
+  // zero to 0px, so both serializations must parse and restore.
+  const env = boot({ storage, deferredRaf: true, frameStyle: { vars: new Map([['grid-template-columns', '280px minmax(0, 1fr) 360px']]), getPropertyValue(k) { return this.vars.get(k) || '' }, setProperty(k, v) { this.setPropertyCalls.push([k, v]); this.vars.set(k, v) }, setPropertyCalls: [] } })
   env.findClass(env.renderStarted(), 'rsb-rail')
   assert.ok(env.layoutCalls.includes('open'), 'the restored Sidebar must re-open the Details Column')
   assert.deepEqual(env.frameStyle.setPropertyCalls || [], [], 'no width write may land before the shell commits')
   flushFrames(env)
   const tracks = env.frameStyle.getPropertyValue('grid-template-columns')
-  assert.equal(tracks, '280px minmax(0, 1fr) 480px', 'the session switch must restore the remembered 480px width')
+  assert.equal(tracks, '280px minmax(0, 1fr) 480px', 'the session switch must restore the remembered 480px width, preserving the authored minmax form')
   assert.equal(env.frameStyle.setPropertyCalls.length, 1, 'the follow window must rewrite the track exactly once')
 }
 
@@ -372,10 +374,10 @@ function storedState(env) {
   const env = boot({ storage, deferredRaf: true })
   env.findClass(env.renderStarted(), 'rsb-rail')
   flushFrames(env)
-  assert.equal(env.frameStyle.getPropertyValue('grid-template-columns'), '280px minmax(0, 1fr) 360px', 'a matching track is left untouched')
+  assert.equal(env.frameStyle.getPropertyValue('grid-template-columns'), '280px minmax(0px, 1fr) 360px', 'a matching track is left untouched')
   assert.equal(env.frameStyle.setPropertyCalls.length, 0, 'a matching track must never be rewritten')
   // A closed column (0px track, fresh session) must not be resized.
-  const env2 = boot({ storage: new Map([[PANEL_KEY, JSON.stringify({ sidebarOpen: true, panelOpen: false, panelHeight: 240, sidebarWidth: 480 })]]), deferredRaf: true, detailsCol: { children: [{}], _width: 0, getBoundingClientRect() { return { width: this._width } } }, frameStyle: { vars: new Map([['grid-template-columns', '280px minmax(0, 1fr) 0px']]), getPropertyValue(k) { return this.vars.get(k) || '' }, setProperty() { throw new Error('must not write a closed column') } } })
+  const env2 = boot({ storage: new Map([[PANEL_KEY, JSON.stringify({ sidebarOpen: true, panelOpen: false, panelHeight: 240, sidebarWidth: 480 })]]), deferredRaf: true, detailsCol: { children: [{}], _width: 0, getBoundingClientRect() { return { width: this._width } } }, frameStyle: { vars: new Map([['grid-template-columns', '280px minmax(0px, 1fr) 0px']]), getPropertyValue(k) { return this.vars.get(k) || '' }, setProperty() { throw new Error('must not write a closed column') } } })
   env2.findClass(env2.renderStarted(), 'rsb-rail')
   flushFrames(env2)
 }
@@ -390,7 +392,7 @@ function storedState(env) {
   assert.ok((env.frameListeners['pointerdown'] || []).length > 0, 'an open docked Sidebar must delegate pointerdown on the frame')
   assert.ok((env.windowListeners['pointerup'] || []).length > 0, 'the release must be observed on the window')
   // The shell's final setDetails commit writes the settled track.
-  env.frameStyle.setProperty('grid-template-columns', '280px minmax(0, 1fr) 500px')
+  env.frameStyle.setProperty('grid-template-columns', '280px minmax(0px, 1fr) 500px')
   fireWindowPointerUp(env) // nothing armed
   assert.equal(storedState(env).sidebarWidth, 360, 'a release with nothing armed must not persist')
   fireFramePointerDown(env, false) // the sidebar-side handle
@@ -412,7 +414,7 @@ function storedState(env) {
     storage,
     deferredRaf: true,
     frameStyle: {
-      vars: new Map([['grid-template-columns', '280px minmax(0, 1fr) 480px']]),
+      vars: new Map([['grid-template-columns', '280px minmax(0px, 1fr) 480px']]),
       getPropertyValue(k) { return this.vars.get(k) || '' },
       setProperty(k, v) { this.calls.push([k, v]); this.vars.set(k, v) },
       calls: [],
@@ -421,12 +423,12 @@ function storedState(env) {
   env.findClass(env.renderStarted(), 'rsb-rail')
   env.pendingFrames.shift()() // frame 1: stale track reads 480; must not stop the window
   assert.equal(env.frameStyle.calls.length, 0, 'the stale matching track must not be rewritten')
-  env.frameStyle.setProperty('grid-template-columns', '280px minmax(0, 1fr) 0px') // close commit
+  env.frameStyle.setProperty('grid-template-columns', '280px minmax(0px, 1fr) 0px') // close commit
   env.pendingFrames.shift()() // frame 2: closed column, skipped
-  env.frameStyle.setProperty('grid-template-columns', '280px minmax(0, 1fr) 360px') // reopen commit
+  env.frameStyle.setProperty('grid-template-columns', '280px minmax(0px, 1fr) 360px') // reopen commit
   const pluginWritesBefore = env.frameStyle.calls.length // the stub also logs the simulated commits above
   flushFrames(env)
-  assert.equal(env.frameStyle.getPropertyValue('grid-template-columns'), '280px minmax(0, 1fr) 480px', 'the follow must land the remembered width after the reopen commit')
+  assert.equal(env.frameStyle.getPropertyValue('grid-template-columns'), '280px minmax(0px, 1fr) 480px', 'the follow must land the remembered width after the reopen commit')
   assert.equal(env.frameStyle.calls.length, pluginWritesBefore + 1, 'the reopen default must be rewritten exactly once')
 }
 
