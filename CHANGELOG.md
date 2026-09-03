@@ -6,6 +6,8 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-04
+
 ### Fixed
 
 - Source Control fetch, pull and push work again when DSH runs the session
