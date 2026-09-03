@@ -518,6 +518,24 @@ const XTERM = (function () {
       return Object.assign({ cwd: cwdStore.get() }, args || {})
     }
 
+    // ---------- Git action icons ----------
+    function GitIcon(props) {
+      const paths = {
+        fetch: ['M8 2v8', 'm4.5 7 3.5 3.5L11.5 7', 'M3 13.5h10'],
+        pull: ['M8 2v11', 'm4.5 9.5L8 13l3.5-3.5'],
+        push: ['M8 14V3', 'm4.5 6.5L8 3l3.5 3.5'],
+        refresh: ['M13.5 6A5.5 5.5 0 1 0 13 11', 'M13.5 2.5V6H10'],
+      }
+      return h('svg', { className: 'rsb-icon', viewBox: '0 0 16 16', 'aria-hidden': true, focusable: false },
+        (paths[props.name] || []).map((d, i) => h('path', { key: i, d: d })))
+    }
+
+    const graphRefreshStore = createStore(null)
+    function GraphRefreshButton() {
+      const refresh = useStore(graphRefreshStore)
+      return h('button', { className: 'rsb-act rsb-icon-act', title: 'Refresh graph', 'aria-label': 'Refresh graph', disabled: !refresh, onClick: () => { if (refresh) refresh() } }, h(GitIcon, { name: 'refresh' }))
+    }
+
     // ---------- Git Status card ----------
     function GitStatusCard() {
       const [inst] = React.useState(() => ({ seq: 0 }))
@@ -640,10 +658,10 @@ const XTERM = (function () {
             data.ahead && data.behind ? ' ' : '',
             data.behind ? '↓' + data.behind : '') : null,
           h('span', { className: 'rsb-spacer' }),
-          h('button', { className: 'rsb-act', title: 'Fetch', disabled: busy !== '', onClick: () => act('sync', { op: 'fetch' }) }, '⟳'),
-          h('button', { className: 'rsb-act', title: noUpstream ? 'Pull (no upstream configured)' : 'Pull from ' + data.upstream, disabled: busy !== '' || noUpstream, onClick: () => act('sync', { op: 'pull' }) }, '↓'),
-          h('button', { className: 'rsb-act', title: noUpstream ? 'Push (no upstream configured)' : 'Push to ' + data.upstream, disabled: busy !== '' || noUpstream, onClick: () => act('sync', { op: 'push' }) }, '↑'),
-          h('button', { className: 'rsb-act', title: 'Refresh', disabled: busy !== '', onClick: () => refresh() }, '↻')),
+          h('button', { className: 'rsb-act rsb-icon-act', title: 'Fetch', 'aria-label': 'Fetch', disabled: busy !== '', onClick: () => act('sync', { op: 'fetch' }) }, h(GitIcon, { name: 'fetch' })),
+          h('button', { className: 'rsb-act rsb-icon-act', title: noUpstream ? 'Pull (no upstream configured)' : 'Pull from ' + data.upstream, 'aria-label': 'Pull', disabled: busy !== '' || noUpstream, onClick: () => act('sync', { op: 'pull' }) }, h(GitIcon, { name: 'pull' })),
+          h('button', { className: 'rsb-act rsb-icon-act', title: noUpstream ? 'Push (no upstream configured)' : 'Push to ' + data.upstream, 'aria-label': 'Push', disabled: busy !== '' || noUpstream, onClick: () => act('sync', { op: 'push' }) }, h(GitIcon, { name: 'push' })),
+          h('button', { className: 'rsb-act rsb-icon-act', title: 'Refresh', 'aria-label': 'Refresh', disabled: busy !== '', onClick: () => refresh() }, h(GitIcon, { name: 'refresh' }))),
         h('div', { className: 'rsb-rootline', title: data.root }, baseName(data.root || '') || data.root),
         h('textarea', {
           className: 'rsb-msg',
@@ -773,6 +791,13 @@ const XTERM = (function () {
         }
       }
 
+      inst.refresh = () => load(0, true)
+      React.useEffect(() => {
+        const refresh = () => inst.refresh()
+        graphRefreshStore.set(refresh)
+        return () => { if (graphRefreshStore.get() === refresh) graphRefreshStore.set(null) }
+      }, [])
+
       React.useEffect(() => {
         if (fp && fp !== inst.lastFp) {
           inst.lastFp = fp
@@ -844,9 +869,7 @@ const XTERM = (function () {
       }
 
       return h('div', { className: 'rsb-graph' },
-        h('div', { className: 'rsb-graph-head' },
-          h('button', { className: 'rsb-act', title: 'Refresh graph', onClick: () => load(0, true) }, '↻'),
-          copied ? h('span', { className: 'rsb-copied' }, copied) : null),
+        copied ? h('span', { className: 'rsb-copied' }, copied) : null,
         gerr ? h('div', { className: 'rsb-error', onClick: () => setGerr(''), title: 'Click to dismiss' }, gerr) : null,
         h('div', { className: 'rsb-gscroll', onScroll: onScroll },
           commits.length === 0 && !loading && !gerr ? h('div', { className: 'rsb-empty' }, 'No commits yet.') : null,
@@ -865,7 +888,7 @@ const XTERM = (function () {
     // ---------- manifest, panel, rail ----------
     const CARD_MANIFEST = [
       { id: 'git-status', title: 'Source Control', order: 10, render: GitStatusCard },
-      { id: 'git-graph', title: 'Commit Graph', order: 20, render: GitGraphCard },
+      { id: 'git-graph', title: 'Commit Graph', order: 20, render: GitGraphCard, headerAction: GraphRefreshButton },
     ]
 
     function SidebarPanel(props) {
@@ -903,7 +926,9 @@ const XTERM = (function () {
         h('div', { className: 'rsb-body' },
           cards.length === 0 ? h('div', { className: 'rsb-empty' }, 'All cards hidden — open ⚙ to re-enable.') : null,
           cards.map((c) => h('section', { key: c.id, className: 'rsb-card' },
-            h('div', { className: 'rsb-card-title' }, c.title),
+            h('div', { className: 'rsb-card-head' },
+              h('div', { className: 'rsb-card-title' }, c.title),
+              c.headerAction ? h(c.headerAction, null) : null),
             h(c.render, null)))))
     }
 
@@ -1867,6 +1892,7 @@ const XTERM = (function () {
       '.rsb-gear-item { display: flex; align-items: center; gap: 6px; padding: 3px 0; cursor: pointer; color: var(--dsw-alias-label-primary); }',
       '.rsb-body { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }',
       '.rsb-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }',
+      '.rsb-card-head { display: flex; align-items: center; gap: 4px; }',
       '.rsb-card-title { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dsw-alias-label-secondary); }',
       '.rsb-status { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }',
       '.rsb-branchrow { display: flex; align-items: center; gap: 4px; }',
@@ -1874,6 +1900,8 @@ const XTERM = (function () {
       '.rsb-branch { color: var(--dsw-alias-brand-primary); font-weight: 600; }',
       '.rsb-ab { color: var(--dsw-alias-label-secondary); font-size: 11px; }',
       '.rsb-act { border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); border-radius: 4px; padding: 0 5px; cursor: pointer; font-size: 11px; line-height: 17px; }',
+      '.rsb-icon-act { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 20px; padding: 0; }',
+      '.rsb-icon { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }',
       '.rsb-act:hover:not(:disabled) { border-color: var(--dsw-alias-border-l2); }',
       '.rsb-act:disabled { opacity: 0.4; cursor: default; }',
       '.rsb-act-danger { color: var(--dsw-alias-state-error-primary); border-color: var(--dsw-alias-state-error-primary); }',
