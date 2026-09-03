@@ -301,7 +301,19 @@ return {
     harness.handle('sync', async (args) => {
       const op = args && args.op
       if (op !== 'fetch' && op !== 'pull' && op !== 'push') return { ok: false, error: 'unknown sync op' }
-      const r = await git(cwdOf(args), op, { timeoutMs: 90000 })
+      const cwd = cwdOf(args)
+      let r = await git(cwd, op, { timeoutMs: 90000 })
+      // DSH's file sandbox masks metadata for paths outside the workspace, so
+      // ssh sees /etc/ssh/ssh_config* as owner nobody:nobody, fails its
+      // ownership check and refuses its config: "Bad owner or permissions on
+      // /etc/ssh/ssh_config.d/*.conf" kills fetch/pull/push before any network
+      // access. Retry once with ssh pointed at only the user's own config —
+      // the file the sandbox does not mask — so host aliases, ports and
+      // IdentityFile settings still apply. Healthy machines never reach the
+      // retry, and non-ssh remotes never fail this way.
+      if (r.code !== 0 && /Bad owner or permissions/.test(r.err)) {
+        r = await git(cwd, '-c core.sshCommand=' + shq('ssh -F ~/.ssh/config') + ' ' + op, { timeoutMs: 90000 })
+      }
       return r.code === 0 ? { ok: true } : { ok: false, error: r.err || r.out || ('git ' + op + ' failed') }
     })
 

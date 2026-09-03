@@ -8,6 +8,16 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ### Fixed
 
+- Source Control fetch, pull and push work again when DSH runs the session
+  under its file sandbox. ssh inside the sandbox sees the system ssh config
+  as owner `nobody:nobody`, fails its ownership check and refuses to read
+  `/etc/ssh/ssh_config.d/*.conf`, so every sync died with "Bad owner or
+  permissions" before any network access; the user's own terminal was never
+  affected because it runs without the sandbox. The host `sync` now retries
+  the same op once with `core.sshCommand` pointed at only the user's
+  `~/.ssh/config` — the file the sandbox does not mask — so host aliases,
+  ports and IdentityFile settings still apply. Healthy machines never reach
+  the retry, and non-ssh remotes never fail this way. (#17)
 - The Source Control Commit button shows its label again in the dark theme.
   The button paired the themed brand fill with a hardcoded white text color;
   DSH resolves `--dsw-alias-brand-primary` to the theme's ink accent —
@@ -37,6 +47,13 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ### Added
 
+- `scripts/test-sync-ssh-retry.mjs` guards the sync fix: it drives the real
+  sandboxed executor with a `git` shim that fails plain sync ops with
+  OpenSSH's exact ownership-check error, and asserts the retry runs the same
+  op under `core.sshCommand='ssh -F ~/.ssh/config'`, that a healthy first
+  attempt is unwrapped, that both attempts failing surfaces the retry's
+  error, and that `dynamic/host.js` carries the same fix. It skips on
+  machines without a DSH checkout. Wired into `npm test`. (#17)
 - `scripts/test-commit-button-theme-contrast.mjs` guards the fix: it extracts
   the Commit and Open button rules from both client sources, resolves them
   against the real DSH theme token tables, and asserts a WCAG contrast of at

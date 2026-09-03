@@ -125,7 +125,10 @@ try {
   await gateway.unstage(repo, ['b.txt'])
   await gateway.commit(repo, 'sandbox policy regression', true)
   await gateway.sync(repo, 'push')
-  const remoteHead = execFileSync('git', ['-C', remote, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+  // Compare the pushed ref, not HEAD: a bare remote's HEAD symref follows
+  // init.defaultBranch and stays unborn when it is not 'main' — rev-parse
+  // then prints the literal 'HEAD' with exit 0 and lies about the push.
+  const remoteHead = execFileSync('git', ['-C', remote, 'rev-parse', '--verify', 'refs/heads/main'], { encoding: 'utf8' }).trim()
   const localHead = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
   assert.equal(remoteHead, localHead, 'push must reach the remote')
 
