@@ -14,10 +14,12 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
   `/etc/ssh/ssh_config.d/*.conf`, so every sync died with "Bad owner or
   permissions" before any network access; the user's own terminal was never
   affected because it runs without the sandbox. The host `sync` now retries
-  the same op once with `core.sshCommand` pointed at only the user's
-  `~/.ssh/config` — the file the sandbox does not mask — so host aliases,
-  ports and IdentityFile settings still apply. Healthy machines never reach
-  the retry, and non-ssh remotes never fail this way. (#17)
+  the same op with `core.sshCommand`, walking the chain a human would: first
+  the user's `~/.ssh/config` — the file the sandbox does not mask, so host
+  aliases, ports and IdentityFile settings still apply — then a config-free
+  `ssh -F /dev/null`, whose default identity-file discovery and agent need
+  no hard-coded key name. Healthy machines never reach the retries, and
+  non-ssh remotes never fail this way. (#17)
 - The Source Control Commit button shows its label again in the dark theme.
   The button paired the themed brand fill with a hardcoded white text color;
   DSH resolves `--dsw-alias-brand-primary` to the theme's ink accent —
@@ -49,11 +51,12 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 - `scripts/test-sync-ssh-retry.mjs` guards the sync fix: it drives the real
   sandboxed executor with a `git` shim that fails plain sync ops with
-  OpenSSH's exact ownership-check error, and asserts the retry runs the same
-  op under `core.sshCommand='ssh -F ~/.ssh/config'`, that a healthy first
-  attempt is unwrapped, that both attempts failing surfaces the retry's
-  error, and that `dynamic/host.js` carries the same fix. It skips on
-  machines without a DSH checkout. Wired into `npm test`. (#17)
+  OpenSSH's exact ownership-check error, and asserts the retry walks
+  `core.sshCommand` from `ssh -F ~/.ssh/config` to `ssh -F /dev/null` when no
+  user config can be read, that a healthy first attempt is unwrapped, that
+  every attempt failing surfaces the last error, and that `dynamic/host.js`
+  carries the same fix. It skips on machines without a DSH checkout. Wired
+  into `npm test`. (#17)
 - `scripts/test-commit-button-theme-contrast.mjs` guards the fix: it extracts
   the Commit and Open button rules from both client sources, resolves them
   against the real DSH theme token tables, and asserts a WCAG contrast of at

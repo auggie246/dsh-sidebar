@@ -71,13 +71,21 @@ const shim = join(shimDir, 'git')
 writeFileSync(shim, `#!/usr/bin/env bash
 REAL_GIT=${JSON.stringify(realGit)}
 for arg in "$@"; do
-  case "$arg" in core.sshCommand=*)
-    if [ "\${RSB_SHIM_FAIL_RETRY:-0}" = "1" ]; then
-      echo "ssh: connect to host invalid.invalid port 22: Connection refused" >&2
-      exit 255
-    fi
-    exec "$REAL_GIT" "$@"
-  ;;
+  case "$arg" in
+    core.sshCommand=*"-F ~/.ssh/config"*)
+      if [ "\${RSB_SHIM_NO_USER_CONFIG:-0}" = "1" ]; then
+        echo "Can't open user config file \${HOME}/.ssh/config: No such file or directory" >&2
+        exit 255
+      fi
+      exec "$REAL_GIT" "$@"
+    ;;
+    core.sshCommand=*"-F /dev/null"*)
+      if [ "\${RSB_SHIM_FAIL_RETRY:-0}" = "1" ]; then
+        echo "ssh: connect to host invalid.invalid port 22: Connection refused" >&2
+        exit 255
+      fi
+      exec "$REAL_GIT" "$@"
+    ;;
   esac
 done
 case "\${@: -1}" in
@@ -177,8 +185,20 @@ try {
   assert.equal(healthyPushes.length, 3, 'the healthy push must add exactly one spawn')
   assert.ok(!healthyPushes[2].includes('core.sshCommand'), 'a healthy first attempt must not be wrapped')
 
-  // Both attempts failing: the retry's error is what the card shows.
+  // No readable user config (some users have none): the walk continues to a
+  // config-free ssh command, whose default identity probing and agent need
+  // no hard-coded key name.
   process.env.RSB_SHIM_FAIL_SYNC = '1'
+  process.env.RSB_SHIM_NO_USER_CONFIG = '1'
+  await gateway.sync(repo, 'push')
+  const chainedPushes = syncSpawns('push')
+  assert.equal(chainedPushes.length, 6, 'the fallback walk must add exactly three spawns: plain, user config, config-free')
+  assert.ok(!chainedPushes[3].includes('core.sshCommand'), 'the failed first attempt must stay plain')
+  assert.ok(chainedPushes[4].includes('-F ~/.ssh/config'), 'the first retry must try the user config')
+  assert.ok(chainedPushes[5].includes('-F /dev/null'), `the second retry must go config-free, got ${chainedPushes[5]}`)
+  assert.equal(remoteHead(), localHead(), 'the config-free fallback push must reach the remote')
+
+  // Every attempt failing: the last attempt's error is what the card shows.
   process.env.RSB_SHIM_FAIL_RETRY = '1'
   await assert.rejects(
     () => gateway.sync(repo, 'push'),
@@ -190,10 +210,12 @@ try {
   const dynamicHost = readFileSync(new URL('../dynamic/host.js', import.meta.url), 'utf8')
   assert.match(dynamicHost, /Bad owner or permissions/, 'dynamic/host.js must gate the retry on the same error')
   assert.ok(dynamicHost.includes("ssh -F ~/.ssh/config"), 'dynamic/host.js must retry with the user ssh config')
+  assert.ok(dynamicHost.includes('ssh -F /dev/null'), 'dynamic/host.js must carry the config-free fallback')
 
   console.log('sync ssh retry check passed')
 } finally {
   delete process.env.RSB_SHIM_FAIL_SYNC
+  delete process.env.RSB_SHIM_NO_USER_CONFIG
   delete process.env.RSB_SHIM_FAIL_RETRY
   for (const dispose of effects) {
     try { await dispose() } catch {}
