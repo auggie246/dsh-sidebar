@@ -101,7 +101,7 @@ Want to try the sidebar without installing it permanently? The repository includ
 
 - **The sidebar is missing:** confirm the composition entry is in the Web profile, restart `dsh web`, then open the arrow on the far right edge.
 - **“Not a git repository”:** open a session whose workspace is inside a Git repository.
-- **Fetch, pull, or push fails:** check that Git is installed and that the host has the required Git credentials. Pull and push also need an upstream branch.
+- **Fetch, pull, or push fails:** check that Git is installed and that the host has the required Git credentials. Pull and push also need an upstream branch. On hosts where DSH runs the session under its file sandbox, ssh can refuse its system config because the sandbox masks file ownership outside the workspace ("Bad owner or permissions on /etc/ssh/ssh_config.d/…"). The card retries on that error with your own `~/.ssh/config`, then with a config-free ssh — so your host aliases, ports and identity settings still apply and no key name is hard-coded. The same push or pull in your own terminal is never affected.
 - **A commit fails:** make sure Git has a configured author identity and that your commit message is not empty.
 - **A prompt icon still shows as a box:** the embedded icon set covers Powerlevel10k's default icons. If your prompt configures an icon outside that set, add its codepoint to `scripts/nerd-icon-glyphs.txt` and run `npm run build:nerd-icons`.
 

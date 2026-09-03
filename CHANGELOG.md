@@ -57,6 +57,9 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
   every attempt failing surfaces the last error, and that `dynamic/host.js`
   carries the same fix. It skips on machines without a DSH checkout. Wired
   into `npm test`. (#17)
+- ADR 0006 records why the card's git runs sandboxed through the shell
+  service, and why sync walks the ssh config only after ssh's exact
+  ownership error, with the rejected alternatives. (#17)
 - `scripts/test-commit-button-theme-contrast.mjs` guards the fix: it extracts
   the Commit and Open button rules from both client sources, resolves them
   against the real DSH theme token tables, and asserts a WCAG contrast of at
