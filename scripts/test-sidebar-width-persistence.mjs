@@ -222,6 +222,12 @@ function railButtons(rail) {
   return (rail.props.children || []).filter((child) => child && child.type === 'button')
 }
 
+// Drain every frame the retry loop scheduled; the loop stops scheduling as
+// soon as applyDockedWidth reports the track matching or rewritten.
+function flushFrames(env) {
+  while (env.pendingFrames.length) env.pendingFrames.shift()()
+}
+
 function pointerEvent(clientX, currentTarget) {
   return {
     clientX,
@@ -309,7 +315,8 @@ function storedState(env) {
 
 // 4. Docked mode: on a session switch the shell reopens the Details Column
 //    at its 360px default; the plugin re-applies the remembered width after
-//    the shell's reopen render commits (two frames later).
+//    the shell's reopen render commits (retrying each frame until the track
+//    matches).
 {
   const storage = new Map()
   storage.set(PANEL_KEY, JSON.stringify({ sidebarOpen: true, panelOpen: false, panelHeight: 240, sidebarWidth: 480 }))
@@ -317,8 +324,7 @@ function storedState(env) {
   env.findClass(env.renderStarted(), 'rsb-rail')
   assert.ok(env.layoutCalls.includes('open'), 'the restored Sidebar must re-open the Details Column')
   assert.deepEqual(env.frameStyle.setPropertyCalls || [], [], 'no width write may land before the shell commits')
-  env.pendingFrames.shift()()
-  env.pendingFrames.shift()()
+  flushFrames(env)
   const tracks = env.frameStyle.getPropertyValue('grid-template-columns')
   assert.equal(tracks, '280px minmax(0, 1fr) 480px', 'the session switch must restore the remembered 480px width')
 }
@@ -330,14 +336,12 @@ function storedState(env) {
   storage.set(PANEL_KEY, JSON.stringify({ sidebarOpen: true, panelOpen: false, panelHeight: 240, sidebarWidth: 360 }))
   const env = boot({ storage, deferredRaf: true })
   env.findClass(env.renderStarted(), 'rsb-rail')
-  env.pendingFrames.shift()()
-  env.pendingFrames.shift()()
+  flushFrames(env)
   assert.equal(env.frameStyle.getPropertyValue('grid-template-columns'), '280px minmax(0, 1fr) 360px', 'a matching track is left untouched')
   // A closed column (0px track, fresh session) must not be resized.
   const env2 = boot({ storage: new Map([[PANEL_KEY, JSON.stringify({ sidebarOpen: true, panelOpen: false, panelHeight: 240, sidebarWidth: 480 })]]), deferredRaf: true, detailsCol: { children: [{}], _width: 0, getBoundingClientRect() { return { width: this._width } } }, frameStyle: { vars: new Map([['grid-template-columns', '280px minmax(0, 1fr) 0px']]), getPropertyValue(k) { return this.vars.get(k) || '' }, setProperty() { throw new Error('must not write a closed column') } } })
   env2.findClass(env2.renderStarted(), 'rsb-rail')
-  env2.pendingFrames.shift()()
-  env2.pendingFrames.shift()()
+  flushFrames(env2)
 }
 
 // 6. Docked mode: a width the user drags with the shell's Details handle
