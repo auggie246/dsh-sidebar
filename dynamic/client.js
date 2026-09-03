@@ -1816,7 +1816,7 @@ const XTERM = (function () {
       '.rsb-tab-picker-warning { font-size: 10px; line-height: 1.45; color: var(--dsw-alias-label-secondary); }',
       '.rsb-tab-picker-error { font-size: 10px; color: var(--dsw-alias-state-error-primary); }',
       '.rsb-tab-picker-actions { display: flex; justify-content: flex-end; gap: 6px; }',
-      '.rsb-tab-picker-open { appearance: none; background: var(--dsw-alias-brand-primary); color: #ffffff; border: none; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-weight: 600; font-size: 11px; line-height: 1.4; }',
+      '.rsb-tab-picker-open { appearance: none; background: var(--dsw-alias-brand-primary); color: var(--dsw-alias-label-primary-foreground); border: none; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-weight: 600; font-size: 11px; line-height: 1.4; }',
       '.rsb-tab-picker-open:disabled { opacity: 0.5; cursor: default; }',
       // Panel Tabs (ticket #6): chips in the strip, their close control,
       // and the iframe content area of the active tab.
@@ -1855,7 +1855,7 @@ const XTERM = (function () {
       '.rsb-act-danger { color: var(--dsw-alias-state-error-primary); border-color: var(--dsw-alias-state-error-primary); }',
       '.rsb-msg { width: 100%; box-sizing: border-box; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 6px; font: inherit; resize: vertical; }',
       '.rsb-msg:focus { outline: 1px solid var(--dsw-alias-brand-primary); }',
-      '.rsb-commit { background: var(--dsw-alias-brand-primary); color: #ffffff; border: none; border-radius: 6px; padding: 6px; cursor: pointer; font-weight: 600; }',
+      '.rsb-commit { background: var(--dsw-alias-brand-primary); color: var(--dsw-alias-label-primary-foreground); border: none; border-radius: 6px; padding: 6px; cursor: pointer; font-weight: 600; }',
       '.rsb-commit:disabled { opacity: 0.5; cursor: default; }',
       '.rsb-error { border: 1px solid var(--dsw-alias-state-error-primary); color: var(--dsw-alias-state-error-primary); border-radius: 6px; padding: 6px; cursor: pointer; word-break: break-word; font-size: 11px; }',
       '.rsb-group { display: flex; flex-direction: column; gap: 1px; }',

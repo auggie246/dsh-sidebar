@@ -8,6 +8,16 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ### Fixed
 
+- The Source Control Commit button shows its label again in the dark theme.
+  The button paired the themed brand fill with a hardcoded white text color;
+  DSH resolves `--dsw-alias-brand-primary` to the theme's ink accent —
+  near-black in the light theme, near-white (#f9fafb) in the dark theme — so
+  the dark theme rendered white text on a near-white button at 1.05:1
+  contrast: a solid block with no visible text, brightening as soon as a
+  commit message made it clickable. The Commit button and the Panel tab
+  picker's Open button, which carried the same rule, now use the host's
+  primary-button text token `--dsw-alias-label-primary-foreground` (dark:
+  18.08:1, light: 18.90:1). (#16)
 - The Sidebar works on a brand-new session. Before a session's first message
   the Details Column is hard-zeroed and the Sidebar renders as a floating
   overlay from a root-scoped slot, whose props carry no sessionId — so every
@@ -24,6 +34,14 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
   non-draggable width. The Sidebar width is now user-draggable in both modes,
   joins Panel height in the globally stored layout state, and every session
   switch restores the remembered width. (#15)
+
+### Added
+
+- `scripts/test-commit-button-theme-contrast.mjs` guards the fix: it extracts
+  the Commit and Open button rules from both client sources, resolves them
+  against the real DSH theme token tables, and asserts a WCAG contrast of at
+  least 4.5:1 in both themes plus a non-empty button label. It skips on
+  machines without a DSH checkout. Wired into `npm test`. (#16)
 
 ### Changed
 
