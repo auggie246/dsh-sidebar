@@ -2,10 +2,12 @@
 // Global Sidebar width check (issue #15): the Sidebar width joins Panel
 // height in the dsh.rsidebar.panel.v1 blob. In overlay mode a left-edge
 // drag handle rewrites --rsb-panel-w and persists the width on release;
-// in docked mode the width the user drags with the shell's own Details
-// handle is persisted, and a session switch re-applies the remembered
-// width instead of the shell's 360px reopen default. Malformed values
-// fall back to the 360px default.
+// in docked mode releasing the shell's own Details drag handle persists
+// the settled inline track (pointerdown delegated on the frame, pointerup
+// on the window), and a session switch re-applies the remembered width
+// across a bounded frame window so the shell's close/reopen commits and
+// its 360px reopen default can never win. Malformed values fall back to
+// the 360px default.
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import vm from 'node:vm'
@@ -73,7 +75,18 @@ function boot(env = {}) {
       setPropertyCalls: calls,
     }
   })()
-  const frame = { children: [{}, centerCol, detailsCol], style: frameStyle }
+  const frameListeners = {}
+  const windowListeners = {}
+  const frame = {
+    children: [{}, centerCol, detailsCol],
+    style: frameStyle,
+    addEventListener(type, fn) { (frameListeners[type] = frameListeners[type] || []).push(fn) },
+    removeEventListener(type, fn) {
+      const list = frameListeners[type] || []
+      const idx = list.indexOf(fn)
+      if (idx !== -1) list.splice(idx, 1)
+    },
+  }
   const overlayElement = { parentElement: frame }
   const resizeObservers = []
   class ResizeObserver {
@@ -99,6 +112,12 @@ function boot(env = {}) {
         },
       },
       innerHeight: env.innerHeight,
+      addEventListener(type, fn) { (windowListeners[type] = windowListeners[type] || []).push(fn) },
+      removeEventListener(type, fn) {
+        const list = windowListeners[type] || []
+        const idx = list.indexOf(fn)
+        if (idx !== -1) list.splice(idx, 1)
+      },
     },
     document: {
       querySelector(selector) { return selector === '[data-shell-overlay]' ? overlayElement : null },
@@ -202,6 +221,8 @@ function boot(env = {}) {
   const overlay = registrations.get('shell.overlay')
   return {
     overlay,
+    frameListeners,
+    windowListeners,
     renderStarted() { return renderFunction(overlay, sessionProps('session-a', false)) },
     renderBlank() { return renderFunction(overlay, sessionProps('session-blank', true)) },
     get stylesheet() { return styleElements.map((el) => el.textContent).join('\n') },
@@ -222,10 +243,23 @@ function railButtons(rail) {
   return (rail.props.children || []).filter((child) => child && child.type === 'button')
 }
 
-// Drain every frame the retry loop scheduled; the loop stops scheduling as
-// soon as applyDockedWidth reports the track matching or rewritten.
+// Drain every frame the follow window scheduled; each frame re-checks the
+// track and stops scheduling after its budget.
 function flushFrames(env) {
   while (env.pendingFrames.length) env.pendingFrames.shift()()
+}
+
+// Simulate the pointer pair the shell's Details handle produces. The
+// pointerdown target's closest() decides whether the capture arms; the
+// pointerup fires on the window like a captured release does.
+function fireFramePointerDown(env, hitDetails) {
+  for (const fn of (env.frameListeners['pointerdown'] || [])) {
+    fn({ target: { closest: (sel) => (hitDetails && sel === '[data-side="details"]') ? {} : null } })
+  }
+}
+
+function fireWindowPointerUp(env) {
+  for (const fn of (env.windowListeners['pointerup'] || [])) fn({})
 }
 
 function pointerEvent(clientX, currentTarget) {
@@ -315,8 +349,8 @@ function storedState(env) {
 
 // 4. Docked mode: on a session switch the shell reopens the Details Column
 //    at its 360px default; the plugin re-applies the remembered width after
-//    the shell's reopen render commits (retrying each frame until the track
-//    matches).
+//    the shell's reopen render commits, re-checking across a bounded frame
+//    window but writing only once.
 {
   const storage = new Map()
   storage.set(PANEL_KEY, JSON.stringify({ sidebarOpen: true, panelOpen: false, panelHeight: 240, sidebarWidth: 480 }))
@@ -327,6 +361,7 @@ function storedState(env) {
   flushFrames(env)
   const tracks = env.frameStyle.getPropertyValue('grid-template-columns')
   assert.equal(tracks, '280px minmax(0, 1fr) 480px', 'the session switch must restore the remembered 480px width')
+  assert.equal(env.frameStyle.setPropertyCalls.length, 1, 'the follow window must rewrite the track exactly once')
 }
 
 // 5. The docked follow never rewrites a track that already matches, never
@@ -338,36 +373,61 @@ function storedState(env) {
   env.findClass(env.renderStarted(), 'rsb-rail')
   flushFrames(env)
   assert.equal(env.frameStyle.getPropertyValue('grid-template-columns'), '280px minmax(0, 1fr) 360px', 'a matching track is left untouched')
+  assert.equal(env.frameStyle.setPropertyCalls.length, 0, 'a matching track must never be rewritten')
   // A closed column (0px track, fresh session) must not be resized.
   const env2 = boot({ storage: new Map([[PANEL_KEY, JSON.stringify({ sidebarOpen: true, panelOpen: false, panelHeight: 240, sidebarWidth: 480 })]]), deferredRaf: true, detailsCol: { children: [{}], _width: 0, getBoundingClientRect() { return { width: this._width } } }, frameStyle: { vars: new Map([['grid-template-columns', '280px minmax(0, 1fr) 0px']]), getPropertyValue(k) { return this.vars.get(k) || '' }, setProperty() { throw new Error('must not write a closed column') } } })
   env2.findClass(env2.renderStarted(), 'rsb-rail')
   flushFrames(env2)
 }
 
-// 6. Docked mode: a width the user drags with the shell's Details handle
-//    reaches the plugin as a ResizeObserver event on the docked Sidebar and
-//    is persisted once the debounce settles.
+// 6. Docked mode: releasing the shell's Details handle persists the settled
+//    inline track. A press anywhere else arms nothing, and the width is
+//    read from the track the shell's final setDetails commit wrote.
 {
-  const env = boot()
+  const env = boot() // no deferred raf: the pointerup persist runs inline
   railButtons(env.findClass(env.renderStarted(), 'rsb-rail'))[0].props.onClick() // open on a started session
-  env.findClass(env.renderStarted(), 'rsb-rail') // re-render with the open state; the effect attaches the watcher
-  assert.ok(env.resizeObservers.length > 0, 'an open docked Sidebar must attach a resize watcher')
-  const watcher = env.resizeObservers[env.resizeObservers.length - 1]
-  env.detailsCol._width = 500
-  watcher.callback()
-  assert.equal(storedState(env).sidebarWidth, 360, 'no width may persist before the debounce settles')
-  assert.equal(env.pendingTimers.length, 1, 'the resize must schedule exactly one debounced write')
-  env.pendingTimers.pop()()
-  assert.equal(storedState(env).sidebarWidth, 500, 'the settled drag width must be persisted')
-  // Subsequent events fold into one write; a below-contract frame (the
-  // column animating closed) must not persist a transient value.
-  env.detailsCol._width = 120
-  watcher.callback()
-  env.detailsCol._width = 440
-  watcher.callback()
-  assert.equal(env.pendingTimers.length, 1, 'a burst of resizes must schedule exactly one debounced write')
-  env.pendingTimers.pop()()
-  assert.equal(storedState(env).sidebarWidth, 440, 'the newest settled width wins')
+  env.findClass(env.renderStarted(), 'rsb-rail') // re-render with the open state; the capture attaches
+  assert.ok((env.frameListeners['pointerdown'] || []).length > 0, 'an open docked Sidebar must delegate pointerdown on the frame')
+  assert.ok((env.windowListeners['pointerup'] || []).length > 0, 'the release must be observed on the window')
+  // The shell's final setDetails commit writes the settled track.
+  env.frameStyle.setProperty('grid-template-columns', '280px minmax(0, 1fr) 500px')
+  fireWindowPointerUp(env) // nothing armed
+  assert.equal(storedState(env).sidebarWidth, 360, 'a release with nothing armed must not persist')
+  fireFramePointerDown(env, false) // the sidebar-side handle
+  fireWindowPointerUp(env)
+  assert.equal(storedState(env).sidebarWidth, 360, 'a release off the details handle must not persist')
+  fireFramePointerDown(env, true) // the details handle
+  fireWindowPointerUp(env)
+  assert.equal(storedState(env).sidebarWidth, 500, 'releasing the details handle must persist the settled track')
+}
+
+// 6b. The stale-match regression: the pre-switch track can read exactly the
+//     remembered width while the shell's close and reopen commits are still
+//     pending. The follow window must keep re-checking and land the width
+//     after the reopen commit writes its 360px default.
+{
+  const storage = new Map()
+  storage.set(PANEL_KEY, JSON.stringify({ sidebarOpen: true, panelOpen: false, panelHeight: 240, sidebarWidth: 480 }))
+  const env = boot({
+    storage,
+    deferredRaf: true,
+    frameStyle: {
+      vars: new Map([['grid-template-columns', '280px minmax(0, 1fr) 480px']]),
+      getPropertyValue(k) { return this.vars.get(k) || '' },
+      setProperty(k, v) { this.calls.push([k, v]); this.vars.set(k, v) },
+      calls: [],
+    },
+  })
+  env.findClass(env.renderStarted(), 'rsb-rail')
+  env.pendingFrames.shift()() // frame 1: stale track reads 480; must not stop the window
+  assert.equal(env.frameStyle.calls.length, 0, 'the stale matching track must not be rewritten')
+  env.frameStyle.setProperty('grid-template-columns', '280px minmax(0, 1fr) 0px') // close commit
+  env.pendingFrames.shift()() // frame 2: closed column, skipped
+  env.frameStyle.setProperty('grid-template-columns', '280px minmax(0, 1fr) 360px') // reopen commit
+  const pluginWritesBefore = env.frameStyle.calls.length // the stub also logs the simulated commits above
+  flushFrames(env)
+  assert.equal(env.frameStyle.getPropertyValue('grid-template-columns'), '280px minmax(0, 1fr) 480px', 'the follow must land the remembered width after the reopen commit')
+  assert.equal(env.frameStyle.calls.length, pluginWritesBefore + 1, 'the reopen default must be rewritten exactly once')
 }
 
 // 7. Malformed sidebarWidth values fall back to the 360px default.
