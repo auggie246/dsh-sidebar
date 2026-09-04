@@ -6,6 +6,8 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-09-04
+
 ### Fixed
 
 - The docked Sidebar's resize line sits on the Sidebar edge again. The shell
