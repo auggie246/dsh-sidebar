@@ -2,11 +2,11 @@
 // Global Sidebar width check (issue #15): the Sidebar width joins Panel
 // height in the dsh.rsidebar.panel.v1 blob. In overlay mode a left-edge
 // drag handle rewrites --rsb-panel-w and persists the width on release;
-// in docked mode releasing the shell's own Details drag handle persists
-// the settled inline track (pointerdown delegated on the frame, pointerup
-// on the window), and a session switch re-applies the remembered width
-// across a bounded frame window so the shell's close/reopen commits and
-// its 360px reopen default can never win. Malformed values fall back to
+// in docked mode a plugin-owned left-edge handle keeps the visible resize
+// line on the restored edge and persists its settled inline track. A session
+// switch re-applies the remembered width across a bounded frame window, so
+// the shell's close/reopen commits and its 360px default can never win.
+// Malformed values fall back to
 // the 360px default.
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
@@ -219,12 +219,15 @@ function boot(env = {}) {
   }
 
   const overlay = registrations.get('shell.overlay')
+  const details = registrations.get('details')
   return {
     overlay,
+    details,
     frameListeners,
     windowListeners,
     renderStarted() { return renderFunction(overlay, sessionProps('session-a', false)) },
     renderBlank() { return renderFunction(overlay, sessionProps('session-blank', true)) },
+    renderDetails() { return renderFunction(details, sessionProps('session-a', false)) },
     get stylesheet() { return styleElements.map((el) => el.textContent).join('\n') },
     storage,
     cssVars,
@@ -299,8 +302,8 @@ function storedState(env) {
   railButtons(env.findClass(tree, 'rsb-rail'))[0].props.onClick() // open the Sidebar
   const aside = env.findClass(env.renderBlank(), 'rsb-overlay-panel')
   assert.ok(aside, 'an open Sidebar on a fresh session must render the floating overlay')
-  const handle = aside.props.children[0]
-  assert.equal(handle.props.className, 'rsb-sidebar-drag', 'the overlay Sidebar must lead with the drag handle')
+  const handle = env.findClass(aside, 'rsb-sidebar-drag')
+  assert.ok(handle, 'the overlay Sidebar must contain the drag handle')
   assert.equal(handle.props.role, 'separator', 'the drag handle is a separator')
   assert.equal(handle.props['aria-orientation'], 'vertical', 'the separator is vertical')
   const captureLog = []
@@ -318,7 +321,7 @@ function storedState(env) {
 {
   const env = boot()
   railButtons(env.findClass(env.renderBlank(), 'rsb-rail'))[0].props.onClick()
-  const handle = env.findClass(env.renderBlank(), 'rsb-overlay-panel').props.children[0]
+  const handle = env.findClass(env.findClass(env.renderBlank(), 'rsb-overlay-panel'), 'rsb-sidebar-drag')
   handle.props.onPointerDown(pointerEvent(400, capturingTarget([])))
   handle.props.onPointerMove(pointerEvent(-500, capturingTarget([])))
   handle.props.onPointerUp(pointerEvent(-500, capturingTarget([])))
@@ -326,7 +329,7 @@ function storedState(env) {
   assert.equal(storedState(env).sidebarWidth, 520, 'the clamped width is what gets persisted')
   const env2 = boot()
   railButtons(env2.findClass(env2.renderBlank(), 'rsb-rail'))[0].props.onClick()
-  const handle2 = env2.findClass(env2.renderBlank(), 'rsb-overlay-panel').props.children[0]
+  const handle2 = env2.findClass(env2.findClass(env2.renderBlank(), 'rsb-overlay-panel'), 'rsb-sidebar-drag')
   handle2.props.onPointerDown(pointerEvent(400, capturingTarget([])))
   handle2.props.onPointerMove(pointerEvent(2000, capturingTarget([])))
   handle2.props.onPointerUp(pointerEvent(2000, capturingTarget([])))
@@ -363,7 +366,18 @@ function storedState(env) {
   flushFrames(env)
   const tracks = env.frameStyle.getPropertyValue('grid-template-columns')
   assert.equal(tracks, '280px minmax(0, 1fr) 480px', 'the session switch must restore the remembered 480px width, preserving the authored minmax form')
+  const docked = env.findClass(env.renderDetails(), 'rsb-docked-panel')
+  assert.ok(docked, 'the docked Sidebar must own its resize surface')
+  const dockedHandle = env.findClass(docked, 'rsb-sidebar-drag')
+  assert.ok(dockedHandle, 'the docked resize line must sit on the Sidebar edge')
+  assert.match(env.stylesheet, /\.rsb-docked-panel > \.rsb-sidebar-drag \{ left: 0; \}/, 'the docked resize line must remain inside the clipped Details Column edge')
+  assert.match(env.stylesheet, /\.rsb-docked-panel[^\n]*\n[^\n]*\[data-side="details"\] \{ display: none; \}/, 'the stale shell Details handle must be hidden')
   assert.equal(env.frameStyle.setPropertyCalls.length, 1, 'the follow window must rewrite the track exactly once')
+  dockedHandle.props.onPointerDown(pointerEvent(720, capturingTarget([])))
+  dockedHandle.props.onPointerMove(pointerEvent(700, capturingTarget([])))
+  dockedHandle.props.onPointerUp(pointerEvent(700, capturingTarget([])))
+  assert.equal(env.frameStyle.getPropertyValue('grid-template-columns'), '280px minmax(0, 1fr) 500px', 'the docked handle must resize the real Details track')
+  assert.equal(storedState(env).sidebarWidth, 500, 'the docked handle must persist its settled width')
 }
 
 // 5. The docked follow never rewrites a track that already matches, never
@@ -458,5 +472,9 @@ function storedState(env) {
   assert.match(env.stylesheet, /\.rsb-sidebar-drag \{[^}]*touch-action: none/, 'the drag handle must suppress touch scrolling')
   assert.match(env.stylesheet, /:root \{[^}]*--rsb-panel-w: min\(360px, calc\(100vw - 22px\)\)/, 'the stylesheet default width must stay 360px')
 }
+
+const dynamicClient = await readFile(new URL('../dynamic/client.js', import.meta.url), 'utf8')
+assert.ok(dynamicClient.includes("className: props && props.docked ? 'rsb-panel rsb-docked-panel' : 'rsb-panel'"), 'dynamic/client.js must carry the docked resize surface')
+assert.ok(dynamicClient.includes('[data-side="details"] { display: none; }'), 'dynamic/client.js must hide the stale shell Details handle')
 
 console.log('global Sidebar width check passed')

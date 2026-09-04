@@ -91,7 +91,11 @@ done
 case "\${@: -1}" in
   push|pull|fetch)
     if [ "\${RSB_SHIM_FAIL_SYNC:-0}" = "1" ]; then
-      echo ${JSON.stringify(BAD_OWNER)} >&2
+      if [ "\${RSB_SHIM_OWNER_STDOUT:-0}" = "1" ]; then
+        echo ${JSON.stringify(BAD_OWNER)}
+      else
+        echo ${JSON.stringify(BAD_OWNER)} >&2
+      fi
       exit 128
     fi
   ;;
@@ -177,6 +181,14 @@ try {
   await gateway.sync(repo, 'pull')
   assert.equal(syncSpawns('pull').length, 2, 'pull must retry the same way')
 
+  // Some shell transports can surface child diagnostics in stdout. The card
+  // must inspect both streams, or it returns the original ownership error
+  // without attempting the safe ssh command.
+  process.env.RSB_SHIM_OWNER_STDOUT = '1'
+  await gateway.sync(repo, 'fetch')
+  assert.equal(syncSpawns('fetch').length, 4, 'an ownership error in stdout must also trigger the retry')
+  delete process.env.RSB_SHIM_OWNER_STDOUT
+
   // Healthy machine: no ssh ownership failure, so the first attempt succeeds
   // and no retry — no core.sshCommand anywhere.
   delete process.env.RSB_SHIM_FAIL_SYNC
@@ -215,6 +227,7 @@ try {
   console.log('sync ssh retry check passed')
 } finally {
   delete process.env.RSB_SHIM_FAIL_SYNC
+  delete process.env.RSB_SHIM_OWNER_STDOUT
   delete process.env.RSB_SHIM_NO_USER_CONFIG
   delete process.env.RSB_SHIM_FAIL_RETRY
   for (const dispose of effects) {

@@ -316,7 +316,11 @@ return {
       // mask), then a config-free ssh — whose default identity-file probing
       // and agent need no hard-coded key name.
       for (const ssh of ['ssh -F ~/.ssh/config', 'ssh -F /dev/null']) {
-        if (r.code === 0 || !/Bad owner or permissions|Can't open user config file/.test(r.err)) break
+        // Inspect both streams. Some shell transports surface a child's
+        // diagnostic in stdout, and missing it returns the original error
+        // without ever attempting the safe ssh command.
+        const diagnostic = r.err + '\n' + r.out
+        if (r.code === 0 || !/Bad owner or permissions|Can't open user config file/.test(diagnostic)) break
         r = await git(cwd, '-c core.sshCommand=' + shq(ssh) + ' ' + op, { timeoutMs: 90000 })
       }
       return r.code === 0 ? { ok: true } : { ok: false, error: r.err || r.out || ('git ' + op + ' failed') }

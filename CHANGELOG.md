@@ -6,6 +6,22 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The docked Sidebar's resize line sits on the Sidebar edge again. The shell
+  positions its own Details handle from its transient layout store, which
+  resets to 360px on every session switch — so after a switch the Sidebar
+  kept its remembered width while the visible line stayed at the default
+  position. The details registration now mounts the plugin's own left-edge
+  drag handle: it writes `--rsb-panel-w` and the frame's inline grid track
+  together and persists on release, and the shell's stale handle is hidden
+  while the Sidebar owns the column. (#15)
+- Source Control sync retries even when the sandboxed shell surfaces ssh's
+  ownership diagnostic on stdout. The retry gate read only stderr, so a
+  transport that places the child's diagnostic there returned the original
+  "Bad owner or permissions" error without ever attempting the safe
+  `core.sshCommand` chain. Both host halves now inspect both streams. (#17)
+
 ## [0.3.2] - 2026-09-04
 
 ### Fixed
