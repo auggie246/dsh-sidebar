@@ -6,6 +6,18 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A README Compatibility section: `dsh-sidebar` supports DeepSeek Harness
+  0.1.1-rc.2 and 0.1.2-rc.1 with the same install steps and no per-version
+  fallback. Verified against the 0.1.2-rc.1 source: the plugin's slots
+  (`details`, `shell.overlay`), its injected services (`shell`, `typert`,
+  `subprocess`, `sandboxPolicy`, `slots`, `remote`, `timer`), and the bundle
+  manifest format are unchanged, and DSH resolves plugin peer dependencies by
+  name only, never by version range, so the plugin's `^0.1.1-rc.0` peer range
+  on `@deepseek-ai/dsh-typert-protocol` needs no update to load under
+  0.1.2-rc.1.
+
 ## [0.3.3] - 2026-09-04
 
 ### Fixed

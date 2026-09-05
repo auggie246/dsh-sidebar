@@ -23,6 +23,10 @@ The sidebar uses the Git credentials already configured on the machine running `
 - Node.js 20 or later
 - Git installed on the host that runs DSH Web
 
+## Compatibility
+
+`dsh-sidebar` supports DeepSeek Harness 0.1.1-rc.2 and 0.1.2-rc.1. The same install steps apply to both versions. No per-version fallback is needed: the slot names (`details`, `shell.overlay`), the injected services (`shell`, `typert`, `subprocess`, `sandboxPolicy`, `slots`, `remote`, `timer`), and the plugin manifest format are unchanged between these releases. DSH does not enforce the plugin's peer-dependency version ranges at load time, so no manifest change is required for 0.1.2-rc.1.
+
 ## Install
 
 ### 1. Add the plugin
