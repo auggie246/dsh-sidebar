@@ -1,7 +1,7 @@
 {
   "name": "dsh-sidebar",
   "description": "A Git sidebar for DeepSeek Harness Web",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "type": "module",
   "license": "MIT",
   "author": "auggie246",

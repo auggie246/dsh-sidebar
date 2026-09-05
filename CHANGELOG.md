@@ -4,6 +4,16 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-09-05
+
+### Changed
+
+- npm now carries the restructured README and the shortened package
+  description ("A Git sidebar for DeepSeek Harness Web") that the re-cut
+  v0.4.0 tag already carries. npm cannot republish an existing version, so
+  the npm-visible documentation changes ride on this patch release. No
+  plugin code changes.
+
 ## [0.4.0] - 2026-09-05
 
 ### Added
