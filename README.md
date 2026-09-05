@@ -25,7 +25,7 @@ The sidebar uses the Git credentials already configured on the machine running `
 
 ## Compatibility
 
-`dsh-sidebar` supports DeepSeek Harness 0.1.1-rc.2 and 0.1.2-rc.1. The same install steps apply to both versions. No per-version fallback is needed: the slot names (`details`, `shell.overlay`), the injected services (`shell`, `typert`, `subprocess`, `sandboxPolicy`, `slots`, `remote`, `timer`), and the plugin manifest format are unchanged between these releases. DSH does not enforce the plugin's peer-dependency version ranges at load time, so no manifest change is required for 0.1.2-rc.1.
+`dsh-sidebar` supports DeepSeek Harness 0.1.1-rc.2 and 0.1.2-rc.1. The same install steps apply to both versions. No per-version fallback is needed: the slot names (`details`, `shell.overlay`), the injected services (`shell`, `typert`, `subprocess`, `sandboxPolicy`, `slots`, `remote`, `timer`), and the plugin manifest format are unchanged between these releases. DSH resolves the plugin's peer dependencies by name only, and the declared `@deepseek-ai/dsh-typert-protocol` range covers both releases, so no manifest change is needed per version.
 
 ## Install
 

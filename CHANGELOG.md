@@ -4,7 +4,7 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.0] - 2026-09-05
 
 ### Added
 
@@ -14,9 +14,15 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
   (`details`, `shell.overlay`), its injected services (`shell`, `typert`,
   `subprocess`, `sandboxPolicy`, `slots`, `remote`, `timer`), and the bundle
   manifest format are unchanged, and DSH resolves plugin peer dependencies by
-  name only, never by version range, so the plugin's `^0.1.1-rc.0` peer range
-  on `@deepseek-ai/dsh-typert-protocol` needs no update to load under
-  0.1.2-rc.1.
+  name only, never by version range.
+
+### Changed
+
+- The peer dependency range on `@deepseek-ai/dsh-typert-protocol` gains
+  `^0.1.2-rc.0`. DSH never enforced the range, so this changes no runtime
+  behavior; it makes range-aware tooling accept DSH 0.1.2-rc.1 instead of
+  reporting a peer mismatch. The dev harness keeps its existing range, so
+  `pnpm-lock.yaml` is untouched.
 
 ## [0.3.3] - 2026-09-04
 

@@ -1,7 +1,7 @@
 {
   "name": "dsh-sidebar",
   "description": "Right-docked modular Sidebar for DSH Web; initial cards provide VS Code-style Source Control and a Commit Graph, with a shared Card Manifest for future cards",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "type": "module",
   "license": "MIT",
   "author": "auggie246",
@@ -61,7 +61,7 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.7 || ^0.1.1-rc.0",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.7 || ^0.1.1-rc.0 || ^0.1.2-rc.0",
     "react": "^18.2.0"
   },
   "devDependencies": {
