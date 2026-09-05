@@ -18,6 +18,11 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ### Changed
 
+- The README follows the [Standard Readme](https://github.com/RichardLitt/standard-readme)
+  structure, with the same content re-filed into its section order. The package
+  description is shortened to "A Git sidebar for DeepSeek Harness Web" to meet
+  the spec's 120-character short-description rule, and the repository
+  description on GitHub is updated to match.
 - The peer dependency range on `@deepseek-ai/dsh-typert-protocol` gains
   `^0.1.2-rc.0`. DSH never enforced the range, so this changes no runtime
   behavior; it makes range-aware tooling accept DSH 0.1.2-rc.1 instead of
