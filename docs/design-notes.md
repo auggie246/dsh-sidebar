@@ -3,7 +3,8 @@
 ## Vocabulary
 
 See [CONTEXT.md](../CONTEXT.md) for the glossary (Sidebar, Rail, Card,
-Card Manifest, Sidebar Settings, Details Column, Working Repository).
+Card Manifest, Sidebar Settings, Details Column, Working Repository,
+Explorer).
 
 ## Key decisions
 
@@ -37,6 +38,12 @@ Card Manifest, Sidebar Settings, Details Column, Working Repository).
   down itself (ADR 0005). Host-side fallback: the deployment workspace root.
 - **Commit behaves like VS Code SCM**: with nothing staged, Commit stages
   everything (`git add -A`) first.
+- **Explorer Card: view-only, not git-bound, lazy.** The tree roots at the
+  session workspace directory without a git requirement, lists one directory
+  per expansion, and refreshes while visible by re-scanning expanded
+  directories only. File selection opens a preview Panel Tab through a
+  module-scope pending-open store that `BottomPanel` drains — the first
+  Card→Panel seam (ADR 0007).
 - **Two distribution forms share the codebase** (see README): a composition
   package (`lib/`, permanent install) and a dynamic bundle (`dynamic/`,
   session-only install). Keep them behaviorally in sync.

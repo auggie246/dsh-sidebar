@@ -76,6 +76,21 @@ The git repository a session's Cards operate on, defined as the current
 session's workspace root. When the workspace root is not a git repository,
 the Cards render a "not a git repository" empty state.
 
+## Explorer
+
+The view-only file-explorer Card (`id: 'explorer'`, last in the Card Manifest,
+visible by default). Unlike the Git Cards it is not git-bound: its tree roots
+at the current session's workspace directory — the same path the Git Cards
+know as the Working Repository — and it renders in any workspace, git
+repository or not. It lists directories lazily, one directory per expansion,
+so never-expanded directories cost nothing; while the Card is visible it
+re-scans only the directories the user expanded. It hides nothing: dotfiles,
+`.git`, and gitignored entries all appear. Selecting a file opens a read-only
+preview Panel Tab — one tab per file, a repeat select focuses the open tab —
+through the pending-open store of ADR 0007. View-only means exactly that: the
+Card renders the tree and opens previews, and every mutating action is
+explicitly out of scope.
+
 ## Commit Ref Summary
 
 The compact, per-row representation of Git refs in the Commit Graph. It shows
