@@ -4,6 +4,17 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Commit Graph ref pills lead with the green remote badge (`origin/main`),
+  then local branches, then tags; the old order showed the local branch
+  first. Symbolic HEAD pointers such as `origin/HEAD` no longer render at
+  all: they only name a branch the row already shows, so the badge was pure
+  duplication in both the row and the overflow popover. The Commit Ref
+  Summary's glossary entry and its test now pin the new order.
+
 ## [0.4.2] - 2026-09-06
 
 ### Changed

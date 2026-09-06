@@ -9,7 +9,8 @@ const source = await readFile(new URL('../lib/client.js', import.meta.url), 'utf
 // stays a +N button whose click renders the full ordered ref popover. These
 // source-level assertions are necessary because this plugin's browser half
 // intentionally exports only its Cordis registration.
-assert.match(source, /ref\.type === 'branch' \? 0[\s\S]*\/HEAD\$\//, 'refs must prioritize branches, remotes, symbolic HEAD, then tags')
+assert.match(source, /ref\.type === 'remote' \? 0[\s\S]*ref\.type === 'branch' \? 1/, 'refs must lead with the remote pill, then local branches, then tags')
+assert.match(source, /\.filter\(\(ref\) => !\/\\\/HEAD\$\/\.test\(ref\.name\)\)\s*\.sort\(/, 'symbolic HEAD pointers such as origin/HEAD must be dropped before ordering and rendering')
 assert.match(source, /refs\.slice\(0, shown\)\.map[\s\S]*'rsb-badge rsb-badge-' \+ r\.type/, 'every fitting ref must render as its typed pill')
 assert.match(source, /offsetLeft \+ b\.offsetWidth/, 'pill fit must be measured against the row width')
 assert.match(source, /new ResizeObserver\(refit\)[\s\S]*const n = measureRefFit|const n = measureRefFit[\s\S]*new ResizeObserver\(refit\)/, 'a resize must re-measure the live DOM and truncate, never hide a pill behind the author')

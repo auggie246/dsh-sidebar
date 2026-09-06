@@ -733,8 +733,13 @@ const XTERM = (function () {
 
     // ---------- Commit Graph card ----------
     function summarizeRefs(refs) {
-      const priority = (ref) => ref.type === 'branch' ? 0 : ref.type === 'remote' && !/\/HEAD$/.test(ref.name) ? 1 : /\/HEAD$/.test(ref.name) ? 2 : 3
-      return (refs || []).slice().sort((a, b) => priority(a) - priority(b) || a.name.localeCompare(b.name))
+      // The green remote pill leads the row, then local branches, then
+      // tags. A symbolic HEAD pointer (origin/HEAD) only names a ref the
+      // row already shows, so it is dropped from the summary entirely.
+      const priority = (ref) => ref.type === 'remote' ? 0 : ref.type === 'branch' ? 1 : 2
+      return (refs || [])
+        .filter((ref) => !/\/HEAD$/.test(ref.name))
+        .sort((a, b) => priority(a) - priority(b) || a.name.localeCompare(b.name))
     }
 
     // Refs render as pills in priority order. A measuring pass keeps as many

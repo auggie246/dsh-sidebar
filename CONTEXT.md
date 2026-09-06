@@ -81,6 +81,8 @@ the Cards render a "not a git repository" empty state.
 The compact, per-row representation of Git refs in the Commit Graph. It shows
 the highest-priority ref and a `+N` overflow affordance; hovering or focusing
 shows all refs, while clicking opens an anchored informational popover. Ref
-priority is local branch, remote-tracking branch, symbolic HEAD, then tag. The
+priority is remote-tracking branch, local branch, then tag. A symbolic HEAD
+pointer, such as `origin/HEAD`, names a ref the row already shows, so the
+summary never shows it. The
 visible ref slot is capped at 120px so the commit message remains the row's
 primary scan target.
