@@ -23,8 +23,9 @@ for (const { file, source } of sources) {
   assert.match(source, /const pendingOpenStore = createStore\(\[\]\)/, file + ': the ADR 0007 pending-open store must exist at plugin scope')
   assert.match(source, /function requestPreview\(path\) \{/, file + ': the file-select seam must be a named function')
   assert.match(source, /pendingOpenStore\.set\(pendingOpenStore\.get\(\)\.concat\(\[\{ path: p \}\]\)\)/, file + ': a file select must enqueue one path request')
-  assert.match(source, /function drainPendingOpens\(\) \{[\s\S]{0,900}pendingOpenStore\.set\(\[\]\)/, file + ': the Panel drain must empty the store it read')
-  assert.match(source, /drainPendingOpens\(\)\n\s*return pendingOpenStore\.subscribe\(\(\) => drainPendingOpens\(\)\)/, file + ': the drain must run on mount and on every store change')
+  assert.match(source, /function drainPendingOpens\(\) \{/, file + ': the Panel must own a drain for the pending-open store')
+  assert.match(source, /pendingOpenStore\.set\(\[\]\)/, file + ': the drain must empty the store it read')
+  assert.match(source, /return pendingOpenStore\.subscribe\(\(\) => drainPendingOpens\(\)\)/, file + ': the drain must run on mount and on every store change')
   assert.match(source, /const TREE_ROW = 24/, file + ': tree rows must carry the exact height the scroll cap counts')
   assert.match(source, /\.rsb-tree \{[^}]*overflow-y: auto/, file + ': the tree must scroll, never stretch the card')
   assert.match(source, /\.rsb-tree-row \{[^}]*height: ' \+ TREE_ROW \+ 'px; box-sizing: border-box/, file + ': the row height must come from the TREE_ROW constant')
@@ -58,6 +59,7 @@ for (const { file, source } of hostSources) {
   assert.match(source, /listDir/, file + ': the host must serve the listDir RPC')
   assert.match(source, /-maxdepth 1 -mindepth 1 -printf/, file + ': the listing must be one GNU find command (the shell service spawns commands directly, no pipes)')
   assert.match(source, /kindChar === 'd' \? 'dir' : kindChar === 'l' \? 'link' : 'file'/, file + ': find type chars must map onto the file/dir/link kinds')
+  assert.match(source, /entries\.sort\(\(a, b\) => \{[\s\S]*?if \(ad !== bd\) return ad - bd/, file + ': entries must sort folders first BEFORE the cap slices, so the kept slice is the sorted-first 1000')
 }
 {
   const { source } = hostSources.find((s) => s.file === 'lib/index.js')

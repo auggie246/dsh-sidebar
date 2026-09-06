@@ -13,7 +13,8 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
   cards it renders in any workspace, git repository or not — and it hides
   nothing: dotfiles, `.git`, and gitignored entries all show. Directories
   list lazily (one `listDir` call per expansion, capped at 1000 entries with
-  a "+N more" row), folders sort before files, and the card refreshes while
+  a "+N more" row — the host sorts folders first and slices afterwards, so
+  the shown entries are the sorted-first 1000), and the card refreshes while
   visible by re-scanning only the root and the expanded folders. Selecting a
   file opens a read-only preview Panel Tab — one tab per file, a repeat
   select focuses the open tab, and a `.md`/`.markdown` file opens as a

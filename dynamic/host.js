@@ -500,10 +500,13 @@ return {
       // mirrored from the lib controller — readFile's exact confinement
       // walk (plain-string based, re-checked on the realpath so a symlinked
       // directory pointing outside the root cannot escape) and one GNU find
-      // (`-printf '%y\t%f\n'` yields type char and name per entry; the
-      // shell service spawns commands directly, no pipes). The line format
-      // cannot carry names containing tabs or newlines; such lines are
-      // skipped fail-closed rather than guessed.
+      // (`-printf '%y%f\0'` yields one NUL-terminated record per entry —
+      // type char then name — in one command. NUL because a POSIX name can
+      // contain a tab or a newline but never a NUL byte, so "nothing
+      // hidden" holds for hostile names too; the shell service spawns
+      // commands directly, no pipes). Entries are sorted (folders first,
+      // then case-insensitive names) and capped afterwards, so the kept
+      // slice is the sorted-first 1000.
       try {
         const rootRaw = cwdOf(args)
         const root = rootRaw.length > 1 ? rootRaw.replace(/\/+$/, '') : '/'
@@ -535,19 +538,29 @@ return {
         const real = out(realRes.stdout).trim()
         if (root !== '/' && real !== root && real.indexOf(root + '/') !== 0) throw new Error('path escapes the working repository')
         const findRes = await shell.run(shell.resolve({
-          command: 'find ' + shq(real) + ' -maxdepth 1 -mindepth 1 -printf ' + shq('%y\\t%f\\n'),
+          command: 'find ' + shq(real) + ' -maxdepth 1 -mindepth 1 -printf ' + shq('%y%f\\0'),
           timeoutMs: 15000,
           sandboxPolicy: repoPolicy(root),
         }))
         if (findRes.exitCode !== 0) throw new Error(out(findRes.stderr).trim() || 'cannot list directory')
         const entries = []
-        for (const line of out(findRes.stdout).split('\n')) {
-          if (line.length < 3 || line[1] !== '\t') continue
-          const kindChar = line[0]
-          const name = line.slice(2)
+        for (const record of out(findRes.stdout).split('\0')) {
+          if (record.length < 2) continue
+          const kindChar = record[0]
+          const name = record.slice(1)
           if (!name) continue
           entries.push({ name, kind: kindChar === 'd' ? 'dir' : kindChar === 'l' ? 'link' : 'file' })
         }
+        entries.sort((a, b) => {
+          const ad = a.kind === 'dir' ? 0 : 1
+          const bd = b.kind === 'dir' ? 0 : 1
+          if (ad !== bd) return ad - bd
+          const al = a.name.toLowerCase()
+          const bl = b.name.toLowerCase()
+          if (al < bl) return -1
+          if (al > bl) return 1
+          return 0
+        })
         const total = entries.length
         return { ok: true, entries: entries.slice(0, LIST_DIR_LIMIT), hasMore: total > LIST_DIR_LIMIT, total }
       } catch (e) {

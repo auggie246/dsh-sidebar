@@ -57,7 +57,7 @@ assert.equal(listInv.result.typeSymbol, 'dsh-sidebar/DirListResult', 'listDir re
 // fixture tree
 // ---------------------------------------------------------------------------
 
-const LIST_FMT = '%y\\t%f\\n'
+const LIST_FMT = '%y%f\\0'
 
 const effects = []
 const provided = new Map()
@@ -67,9 +67,15 @@ mkdirSync(join(workspaceRoot, 'empty'), { recursive: true })
 writeFileSync(join(workspaceRoot, 'demo.html'), '<p>hello</p>\n')
 writeFileSync(join(workspaceRoot, 'docs', 'readme.md'), '# Title\n')
 symlinkSync(join(workspaceRoot, 'demo.html'), join(workspaceRoot, 'file-link'))
+// Issue #21 spec review: "nothing hidden" must survive hostile names. GNU
+// find's -printf can emit NUL separators, so tab and newline names ride the
+// same one command.
+writeFileSync(join(workspaceRoot, 'with\ttab.txt'), 'tab\n')
+writeFileSync(join(workspaceRoot, 'with\nnewline.txt'), 'newline\n')
 const bigDir = join(workspaceRoot, 'big')
 mkdirSync(bigDir, { recursive: true })
 for (let i = 0; i < 1001; i++) writeFileSync(join(bigDir, 'entry-' + String(i).padStart(4, '0') + '.txt'), 'x')
+mkdirSync(join(bigDir, 'zz-dir'), { recursive: true })
 const exactDir = join(workspaceRoot, 'exact')
 mkdirSync(exactDir, { recursive: true })
 for (let i = 0; i < 1000; i++) writeFileSync(join(exactDir, 'entry-' + String(i).padStart(4, '0') + '.txt'), 'x')
@@ -81,14 +87,15 @@ function unquote(quoted) {
 
 let policies = []
 
-// Emulate GNU find: one level below dir, `%y\t%f\n` per entry, where the
-// type char maps readdirSync's dirent kinds the way find's %y does.
+// Emulate GNU find: one level below dir, `%y%f\0` per entry (one record:
+// type char then name, NUL-terminated), where the type char maps
+// readdirSync's dirent kinds the way find's %y does.
 function findListing(dir) {
   const dirents = readdirSync(dir, { withFileTypes: true })
   let out = ''
   for (const d of dirents) {
     const kind = d.isDirectory() ? 'd' : d.isSymbolicLink() ? 'l' : d.isFile() ? 'f' : 'o'
-    out += kind + '\t' + d.name + '\n'
+    out += kind + d.name + '\0'
   }
   return out
 }
@@ -147,26 +154,30 @@ try {
   // ------------------------------------------------------------------
   // 1. Success round-trip: the root itself (empty path and '.'), a
   //    nested directory, and an absolute path inside the root. Kinds
-  //    map to file/dir/link.
+  //    map to file/dir/link, folders sort before files case-
+  //    insensitively (the host sorts before capping), and hostile
+  //    names — tabs and newlines — survive ("nothing hidden").
   // ------------------------------------------------------------------
   assert.deepEqual(
     await gateway.listDir(workspaceRoot, ''),
     {
       entries: [
         { name: 'big', kind: 'dir' },
-        { name: 'demo.html', kind: 'file' },
         { name: 'docs', kind: 'dir' },
         { name: 'empty', kind: 'dir' },
         { name: 'exact', kind: 'dir' },
+        { name: 'demo.html', kind: 'file' },
         { name: 'file-link', kind: 'link' },
+        { name: 'with\ttab.txt', kind: 'file' },
+        { name: 'with\nnewline.txt', kind: 'file' },
       ],
       hasMore: false,
-      total: 6,
+      total: 8,
     },
-    'listDir with an empty path must list the workspace root',
+    'listDir with an empty path must list the workspace root, sorted, hostile names intact',
   )
   const dot = await gateway.listDir(workspaceRoot, '.')
-  assert.equal(dot.entries.length, 6, "listDir with '.' must list the workspace root too")
+  assert.equal(dot.entries.length, 8, "listDir with '.' must list the workspace root too")
   assert.deepEqual(
     await gateway.listDir(workspaceRoot, 'docs'),
     { entries: [{ name: 'readme.md', kind: 'file' }], hasMore: false, total: 1 },
@@ -211,13 +222,17 @@ try {
   console.log('listDir validation check passed')
 
   // ------------------------------------------------------------------
-  // 4. Entry cap: over 1000 entries slices to 1000 with hasMore and a
-  //    true total; exactly 1000 entries keeps hasMore false.
+  // 4. Entry cap: the host sorts (folders first, case-insensitive) BEFORE
+  //    slicing, so the kept 1000 are the sorted-first 1000, not find's
+  //    arbitrary readdir order.
   // ------------------------------------------------------------------
   const big = await gateway.listDir(workspaceRoot, 'big')
   assert.equal(big.entries.length, 1000, 'a huge directory must slice to exactly 1000 entries')
   assert.equal(big.hasMore, true, 'a directory over the cap must set hasMore')
-  assert.equal(big.total, 1001, 'total must count every entry, not only the slice')
+  assert.equal(big.total, 1002, 'total must count every entry, not only the slice')
+  assert.deepEqual(big.entries[0], { name: 'zz-dir', kind: 'dir' }, 'the slice must lead with the folder (folders sort first)')
+  assert.deepEqual(big.entries[1], { name: 'entry-0000.txt', kind: 'file' }, 'the slice must continue with the alphabetically first files')
+  assert.deepEqual(big.entries[999], { name: 'entry-0998.txt', kind: 'file' }, 'the slice must be the sorted-first 1000, not readdir order')
   const exact = await gateway.listDir(workspaceRoot, 'exact')
   assert.equal(exact.entries.length, 1000, 'a directory exactly at the cap must return all 1000 entries')
   assert.equal(exact.hasMore, false, 'a directory exactly at the cap must keep hasMore false')
