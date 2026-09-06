@@ -51,6 +51,16 @@ return {
     const subprocess = ctx.get('subprocess')
     const RING_LIMIT = 100 * 1024
     const PULL_HOLD_MS = 1000
+    // File previews (ticket #7): one readFile payload may not exceed 2 MB,
+    // so a giant file can never flood the RPC channel or the iframe srcdoc.
+    // The constant was missing from this twin, so every dynamic-bundle
+    // readFile died on its size probe with a ReferenceError — found by the
+    // issue #21 twin-sync work.
+    const READ_FILE_LIMIT = 2 * 1024 * 1024
+    // Explorer (issue #21): one listDir reply carries at most 1000 entries;
+    // the true count rides along in total and the card renders a "+N more"
+    // row.
+    const LIST_DIR_LIMIT = 1000
     const terminals = new Map()
     let ptyCounter = 0
     // Ticket #9: session ids embed a per-boot nonce. A page reload carries
@@ -480,6 +490,66 @@ return {
         const content = out(catRes.stdout)
         if (content.length > READ_FILE_LIMIT) throw new Error('file is larger than the 2 MB preview limit')
         return { ok: true, content }
+      } catch (e) {
+        return { ok: false, error: String((e && e.message) || e) }
+      }
+    })
+
+    harness.handle('listDir', async (args) => {
+      // Explorer (issue #21): list ONE directory level of the workspace,
+      // mirrored from the lib controller — readFile's exact confinement
+      // walk (plain-string based, re-checked on the realpath so a symlinked
+      // directory pointing outside the root cannot escape) and one GNU find
+      // (`-printf '%y\t%f\n'` yields type char and name per entry; the
+      // shell service spawns commands directly, no pipes). The line format
+      // cannot carry names containing tabs or newlines; such lines are
+      // skipped fail-closed rather than guessed.
+      try {
+        const rootRaw = cwdOf(args)
+        const root = rootRaw.length > 1 ? rootRaw.replace(/\/+$/, '') : '/'
+        const path = String(args && args.path == null ? '' : args.path).trim()
+        if (path.indexOf('\0') !== -1) throw new Error('path contains a NUL byte')
+        let rel = path
+        if (path[0] === '/') {
+          if (root === '/') rel = path.slice(1)
+          else if (path === root) rel = ''
+          else if (path.indexOf(root + '/') === 0) rel = path.slice(root.length + 1)
+          else throw new Error('path escapes the working repository')
+        }
+        const parts = []
+        for (const segment of rel.split('/')) {
+          if (segment === '' || segment === '.') continue
+          if (segment === '..') {
+            if (parts.length === 0) throw new Error('path escapes the working repository')
+            parts.pop()
+            continue
+          }
+          parts.push(segment)
+        }
+        let abs = parts.length ? root + '/' + parts.join('/') : root
+        // Confinement is re-checked on the real path: find follows symlinks
+        // to the listed directory, so a link inside the workspace pointing
+        // outside it must not escape. realpath also errors on a missing path.
+        const realRes = await shell.run(shell.resolve({ command: 'realpath -- ' + shq(abs), timeoutMs: 15000, sandboxPolicy: repoPolicy(root) }))
+        if (realRes.exitCode !== 0) throw new Error(out(realRes.stderr).trim() || 'cannot list directory')
+        const real = out(realRes.stdout).trim()
+        if (root !== '/' && real !== root && real.indexOf(root + '/') !== 0) throw new Error('path escapes the working repository')
+        const findRes = await shell.run(shell.resolve({
+          command: 'find ' + shq(real) + ' -maxdepth 1 -mindepth 1 -printf ' + shq('%y\\t%f\\n'),
+          timeoutMs: 15000,
+          sandboxPolicy: repoPolicy(root),
+        }))
+        if (findRes.exitCode !== 0) throw new Error(out(findRes.stderr).trim() || 'cannot list directory')
+        const entries = []
+        for (const line of out(findRes.stdout).split('\n')) {
+          if (line.length < 3 || line[1] !== '\t') continue
+          const kindChar = line[0]
+          const name = line.slice(2)
+          if (!name) continue
+          entries.push({ name, kind: kindChar === 'd' ? 'dir' : kindChar === 'l' ? 'link' : 'file' })
+        }
+        const total = entries.length
+        return { ok: true, entries: entries.slice(0, LIST_DIR_LIMIT), hasMore: total > LIST_DIR_LIMIT, total }
       } catch (e) {
         return { ok: false, error: String((e && e.message) || e) }
       }

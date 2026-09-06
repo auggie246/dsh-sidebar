@@ -125,6 +125,20 @@ const XTERM = (function () {
     }
     function setSidebarOpen(v) { openStore.set(v === true); persistPanelState() }
     function setPanelOpen(v) { panelOpenStore.set(v === true); persistPanelState() }
+
+    // ADR 0007: the pending-open store is the whole Card→Panel seam. A Card
+    // enqueues one { path } per file select and flips the Panel open; a
+    // mounted BottomPanel drains the store into its tab list (one tab per
+    // file, a repeat select focuses). Both sides keep working when the
+    // other is absent: a click with no mounted Panel leaves a pending
+    // request that the next mount drains.
+    const pendingOpenStore = createStore([])
+    function requestPreview(path) {
+      const p = String(path || '').trim()
+      if (!p) return
+      pendingOpenStore.set(pendingOpenStore.get().concat([{ path: p }]))
+      setPanelOpen(true)
+    }
     function viewportPanelMaxH() {
       const vh = typeof window !== 'undefined' ? window.innerHeight : undefined
       return typeof vh === 'number' && Number.isFinite(vh) && vh > 0 ? 0.6 * vh : Infinity
@@ -298,6 +312,11 @@ const XTERM = (function () {
     const TAB_TYPE_HTML_FILE = 'html-file'
       const TAB_TYPE_TERMINAL = 'terminal'
     const TAB_TYPE_MARKDOWN_FILE = 'markdown-file'
+    // The preview type a file select opens (issue #21): a .md/.markdown
+    // file renders as Markdown, everything else as an HTML file preview.
+    function previewTypeFor(path) {
+      return /\.(md|markdown)$/i.test(String(path || '')) ? TAB_TYPE_MARKDOWN_FILE : TAB_TYPE_HTML_FILE
+    }
     const TAB_TYPE_LOCALHOST_URL = 'localhost-url'
     function tabsStorageKey(sessionId) { return TABS_KEY_BASE + sessionId }
     function normalizeTabUrl(raw) {
@@ -985,10 +1004,158 @@ const XTERM = (function () {
             refPopover.refs.map((r, i) => h('span', { key: 'ref' + i, className: 'rsb-badge rsb-badge-' + r.type }, r.name)))) : null)
     }
 
+    // ---------- Explorer card (issue #21) ----------
+    // The view-only file explorer. Unlike the Git cards it is not
+    // git-bound: it roots at the session workspace directory whatever that
+    // directory holds, so it renders in any workspace. Directories list
+    // lazily — one listDir call per expansion — and the 3 s visible refresh
+    // re-lists only the root and the expanded folders, so node_modules and
+    // .git stay free until someone opens them. Nothing is hidden: dotfiles,
+    // .git, and gitignored entries all show. A file select opens a
+    // read-only preview Panel Tab through the ADR 0007 pending-open store;
+    // a folder select expands or collapses. View-only means exactly that:
+    // the card renders and previews, and every mutating action is out of
+    // scope.
+    const TREE_ROW = 24 // fixed tree-row height, padding included
+    const TREE_INDENT = 12 // per-level indent, applied from depth 0 at the root
+
+    function ExplorerCard() {
+      const [inst] = React.useState(() => ({ seq: 0, expanded: new Set() }))
+      const [tree, setTree] = React.useState(() => ({ expanded: new Set(), byPath: {} }))
+      // The refresh closure is created once (effect deps []), so the
+      // expanded set it must re-scan is published here each render — the
+      // same instance-object pattern the Panel's drag state and tab list
+      // use.
+      inst.expanded = tree.expanded
+
+      function patchPath(p, patch) {
+        setTree((cur) => ({
+          expanded: cur.expanded,
+          byPath: Object.assign({}, cur.byPath, { [p]: Object.assign({}, cur.byPath[p], patch) }),
+        }))
+      }
+
+      async function loadPath(p, my) {
+        try {
+          const r = await host.call('listDir', withCwd({ path: p }))
+          if (my !== inst.seq) return
+          if (r && r.ok) {
+            patchPath(p, { entries: r.entries, hasMore: r.hasMore, total: r.total, err: '' })
+          } else {
+            patchPath(p, { err: String((r && r.error) || 'listDir failed') })
+          }
+        } catch (e) {
+          if (my !== inst.seq) return
+          patchPath(p, { err: String((e && e.message) || e) })
+        }
+      }
+
+      async function refresh() {
+        const my = ++inst.seq
+        await Promise.all([''].concat(Array.from(inst.expanded)).map((p) => loadPath(p, my)))
+      }
+
+      React.useEffect(() => {
+        refresh()
+        return ctx.interval(() => { refresh() }, 3000)
+      }, [])
+
+      function toggleDir(p) {
+        const expanded = new Set(inst.expanded)
+        const wasExpanded = expanded.has(p)
+        if (wasExpanded) {
+          expanded.delete(p)
+          setTree((cur) => {
+            const byPath = {}
+            for (const key of Object.keys(cur.byPath)) {
+              // Collapsing prunes the listings below the folder; its own
+              // listing stays cached for the next expansion.
+              if (key !== p && key.indexOf(p + '/') === 0) continue
+              byPath[key] = cur.byPath[key]
+            }
+            return { expanded, byPath }
+          })
+        } else {
+          expanded.add(p)
+          setTree((cur) => ({ expanded, byPath: cur.byPath }))
+          loadPath(p, inst.seq)
+        }
+      }
+
+      // Folders first, then case-insensitive names — the VS Code explorer
+      // order. Links sort with the files: whether a link resolves to a
+      // directory is only knowable on expansion.
+      function sortEntries(entries) {
+        return entries.slice().sort((a, b) => {
+          const ad = a.kind === 'dir' ? 0 : 1
+          const bd = b.kind === 'dir' ? 0 : 1
+          if (ad !== bd) return ad - bd
+          const al = String(a.name).toLowerCase()
+          const bl = String(b.name).toLowerCase()
+          if (al < bl) return -1
+          if (al > bl) return 1
+          return 0
+        })
+      }
+
+      function rowsFor(path, depth, out) {
+        const data = tree.byPath[path]
+        if (!data) return
+        // A failed listing shows the error under the folder instead of
+        // children; the next refresh pass clears it.
+        if (data.err) {
+          out.push({ err: true, path, depth, message: data.err })
+          return
+        }
+        if (!data.entries) return
+        for (const entry of sortEntries(data.entries)) {
+          const childPath = path ? path + '/' + entry.name : entry.name
+          out.push({ entry, path: childPath, depth })
+          // Links expand like folders: a directory link lists its target
+          // (the host's realpath confinement decides where that leads),
+          // and a file link lists as empty rather than guessing.
+          if ((entry.kind === 'dir' || entry.kind === 'link') && tree.expanded.has(childPath)) {
+            rowsFor(childPath, depth + 1, out)
+          }
+        }
+        if (data.hasMore) out.push({ more: true, path, depth, count: data.total - data.entries.length })
+        else if (data.entries.length === 0 && (path === '' || tree.expanded.has(path))) out.push({ empty: true, path, depth })
+      }
+
+      if (!cwdStore.get()) {
+        return h('div', { className: 'rsb-empty' }, 'No workspace resolved yet — this card follows the current session workspace.')
+      }
+      const rootData = tree.byPath['']
+      if (!rootData || rootData.err || !rootData.entries) {
+        return h('div', { className: 'rsb-empty' }, rootData && rootData.err ? 'Error: ' + rootData.err : 'Loading…')
+      }
+      const rows = []
+      rowsFor('', 0, rows)
+      return h('div', { className: 'rsb-tree' },
+        rows.map((row) => {
+          const indent = { paddingLeft: (row.depth * TREE_INDENT + 6) + 'px' }
+          if (row.more) return h('div', { key: 'more:' + row.path, className: 'rsb-tree-more', style: indent }, '+' + row.count + ' more…')
+          if (row.empty) return h('div', { key: 'empty:' + row.path, className: 'rsb-tree-empty', style: indent }, '(empty)')
+          if (row.err) return h('div', { key: 'err:' + row.path, className: 'rsb-tree-err', style: indent }, row.message)
+          const expandable = row.entry.kind === 'dir' || row.entry.kind === 'link'
+          const expandedHere = tree.expanded.has(row.path)
+          return h('div', {
+            key: row.path,
+            className: 'rsb-tree-row',
+            style: indent,
+            title: row.path,
+            onClick: () => { if (expandable) toggleDir(row.path); else requestPreview(row.path) },
+          },
+            h('span', { className: 'rsb-tree-caret' }, expandable ? (expandedHere ? '▾' : '▸') : '·'),
+            h('span', { className: 'rsb-tree-name' }, row.entry.name))
+        }))
+    }
+
     // ---------- manifest, panel, rail ----------
     const CARD_MANIFEST = [
       { id: 'git-status', title: 'Source Control', order: 10, render: GitStatusCard },
       { id: 'git-graph', title: 'Commit Graph', order: 20, render: GitGraphCard, headerAction: GraphRefreshButton },
+      { id: 'explorer', title: 'Explorer', order: 30, render: ExplorerCard },
     ]
 
     function SidebarPanel(props) {
@@ -1538,6 +1705,41 @@ const XTERM = (function () {
         setTabs(next)
         persistPanelTabs(sessionId, next)
       }
+      // ADR 0007: drain the pending-open store. The mount-time drain
+      // covers a request made while the Panel was closed; the store
+      // subscription covers a request into the already-open Panel. Both
+      // fold through the same one-tab-per-file dedupe the picker's form
+      // uses, and persistence rides setAndPersistTabs, so explorer tabs
+      // survive reloads and Panel close/reopen exactly like picker tabs.
+      // The drain reads the tab list off the per-render instance object
+      // (the bindTerminalSession pattern) so the subscription closure can
+      // never act on a stale list.
+      function drainPendingOpens() {
+        const reqs = pendingOpenStore.get()
+        if (!reqs || !reqs.length) return
+        pendingOpenStore.set([])
+        const cur = inst.tabs || tabs
+        let nextTabs = cur.tabs
+        let active = cur.active
+        for (const req of reqs) {
+          const path = String((req && req.path) || '').trim()
+          if (!path) continue
+          const type = previewTypeFor(path)
+          const existing = nextTabs.find((t) => t.type === type && String(t.path || '').trim() === path)
+          if (existing) {
+            active = existing.id
+          } else {
+            const tab = { id: newTabId(), type, path }
+            nextTabs = nextTabs.concat([tab])
+            active = tab.id
+          }
+        }
+        if (active !== cur.active || nextTabs !== cur.tabs) setAndPersistTabs({ tabs: nextTabs, active })
+      }
+      React.useEffect(() => {
+        drainPendingOpens()
+        return pendingOpenStore.subscribe(() => drainPendingOpens())
+      }, [])
       // Terminal lifecycle (ticket #9): a terminal tab reports its host
       // PTY session id once its shell spawns; recording it into the tab
       // entry (and the storage blob) is what lets a page reload re-attach
@@ -2087,6 +2289,17 @@ const XTERM = (function () {
       '.rsb-term-dead { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 16px; background: #1e1e1e; color: #8b949e; text-align: center; }',
       '.rsb-term-dead-title { font-size: 12px; font-weight: 600; color: #e6edf3; }',
       '.rsb-term-dead-sub { font-size: 11px; line-height: 1.5; max-width: 340px; }',
+      // Explorer (issue #21): eleven tree rows fit before scrolling; the
+      // cap counts rows (TREE_ROW each), the same trick as the pending
+      // cap. Rows highlight on hover and the name column ellipsizes, so
+      // a deep path never stretches the card.
+      '.rsb-tree { max-height: ' + TREE_ROW * 11 + 'px; overflow-y: auto; }',
+      '.rsb-tree-row { display: flex; align-items: center; gap: 4px; height: ' + TREE_ROW + 'px; box-sizing: border-box; cursor: pointer; white-space: nowrap; overflow: hidden; border-radius: 4px; }',
+      '.rsb-tree-row:hover { background: var(--dsw-alias-bg-layer-2); }',
+      '.rsb-tree-caret { flex-shrink: 0; width: 12px; text-align: center; color: var(--dsw-alias-label-secondary); }',
+      '.rsb-tree-name { overflow: hidden; text-overflow: ellipsis; color: var(--dsw-alias-label-primary); }',
+      '.rsb-tree-more, .rsb-tree-empty, .rsb-tree-err { display: flex; align-items: center; height: ' + TREE_ROW + 'px; box-sizing: border-box; font-size: 11px; color: var(--dsw-alias-label-secondary); }',
+      '.rsb-tree-err { color: var(--dsw-alias-state-error-primary); }',
     ].join('\n'))
 
     // The vendored xterm stylesheet rides the generated block: inject it

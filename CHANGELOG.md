@@ -6,6 +6,27 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The **Explorer** card joins the Sidebar: a view-only file explorer over the
+  current session's workspace directory. It is not git-bound — unlike the Git
+  cards it renders in any workspace, git repository or not — and it hides
+  nothing: dotfiles, `.git`, and gitignored entries all show. Directories
+  list lazily (one `listDir` call per expansion, capped at 1000 entries with
+  a "+N more" row), folders sort before files, and the card refreshes while
+  visible by re-scanning only the root and the expanded folders. Selecting a
+  file opens a read-only preview Panel Tab — one tab per file, a repeat
+  select focuses the open tab, and a `.md`/`.markdown` file opens as a
+  Markdown preview. The Card→Panel seam is a pending-open store drained by
+  the Panel (ADR 0007).
+
+### Fixed
+
+- The dynamic bundle's file preview was broken: `READ_FILE_LIMIT` was used
+  in `dynamic/host.js` without ever being declared, so every readFile in a
+  one-session dynamic install failed on its size probe with a
+  ReferenceError. The composition package (`lib/`) was unaffected.
+
 ### Changed
 
 - Git Status pending-commit rows (Merge Conflicts, Staged Changes, and
