@@ -8,6 +8,11 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ### Changed
 
+- Git Status pending-commit rows (Merge Conflicts, Staged Changes, and
+  Changes) now share one scroll area that shows at most six file rows before
+  it scrolls, so the card no longer grows with the number of pending files.
+  With six or fewer rows pending the card renders as before; the cap only
+  engages past six.
 - Commit Graph ref pills lead with the green remote badge (`origin/main`),
   then local branches, then tags; the old order showed the local branch
   first. Symbolic HEAD pointers such as `origin/HEAD` no longer render at
