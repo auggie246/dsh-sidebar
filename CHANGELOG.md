@@ -4,6 +4,23 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Commit Graph rows now follow a two-line history-list layout: short hash +
+  subject on the first line, ref pills + "author · time" on the second. The
+  lane dot aligns with the subject line, and the initials avatar is replaced
+  by the plain author name.
+- The Commit Graph scroll box caps at exactly six rows (240px) instead of
+  38vh, so the default view always shows six commits before scrolling.
+- Commit Graph ref pills are no longer capped at one pill plus "+N": a
+  measuring pass renders as many pills as the row width fits, in priority
+  order and with the existing branch/remote/tag colors, and only the
+  remainder collapses into the "+N" popover button. Sidebar resizes
+  re-measure the live DOM, so a pill that stops fitting converts into "+N"
+  instead of clipping behind the author name.
+
 ## [0.4.1] - 2026-09-05
 
 ### Changed
