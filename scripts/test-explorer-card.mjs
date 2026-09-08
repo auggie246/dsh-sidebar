@@ -546,4 +546,28 @@ console.log('explorer open-panel drain check passed')
 }
 console.log('explorer stylesheet check passed')
 
+// 8. The header's collapse-all button folds every expanded folder at once;
+//    re-expanding lists again.
+{
+  const env = boot()
+  openSidebar(env)
+  await tick()
+  env.rowWithText(env.findClass(env.render(blankProps), 'rsb-panel'), 'rsb-tree-row', 'docs').props.onClick()
+  await tick()
+  env.rowWithText(env.findClass(env.render(blankProps), 'rsb-panel'), 'rsb-tree-row', 'img').props.onClick()
+  await tick()
+  let panel = env.findClass(env.render(blankProps), 'rsb-panel')
+  assert.equal(env.findAll(panel, 'rsb-tree-row').length, 5, 'docs expanded plus img expanded must render five rows (img is empty)')
+  const collapseBtn = env.findAll(panel, 'rsb-icon-act').find((b) => b.props['aria-label'] === 'Collapse all folders')
+  assert.ok(collapseBtn, 'the Explorer card head must carry a collapse-all button')
+  collapseBtn.props.onClick()
+  panel = env.findClass(env.render(blankProps), 'rsb-panel')
+  assert.equal(env.findAll(panel, 'rsb-tree-row').length, 3, 'collapse-all must fold back to the root listing')
+  env.rowWithText(panel, 'rsb-tree-row', 'docs').props.onClick()
+  await tick()
+  panel = env.findClass(env.render(blankProps), 'rsb-panel')
+  assert.equal(env.remoteCalls.filter((c) => c.method === 'listDir' && c.args[1] === 'docs').length, 2, 're-expanding after collapse-all must list the folder again')
+}
+console.log('explorer collapse-all check passed')
+
 console.log('Explorer card check passed')

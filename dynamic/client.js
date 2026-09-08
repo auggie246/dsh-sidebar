@@ -540,15 +540,30 @@ const XTERM = (function () {
         pull: ['M8 2v11', 'm4.5 9.5L8 13l3.5-3.5'],
         push: ['M8 14V3', 'm4.5 6.5L8 3l3.5 3.5'],
         refresh: ['M13.5 6A5.5 5.5 0 1 0 13 11', 'M13.5 2.5V6H10'],
+        collapse: ['M3.5 6.5L8 3l4.5 3.5', 'M3.5 12.5L8 9l4.5 3.5'],
       }
       return h('svg', { className: 'rsb-icon', viewBox: '0 0 16 16', 'aria-hidden': true, focusable: false },
         (paths[props.name] || []).map((d, i) => h('path', { key: i, d: d })))
     }
 
+    // The Explorer's head button (issue #21): the card publishes its
+    // collapse-all action into this store on mount, mirroring the graph
+    // refresh hand-off, so the manifest's headerAction stays a plain
+    // component with no props. The action rides inside { run } — a bare
+    // function as the store value would be interpreted by React's state
+    // setter as a functional update and CALLED on publish (found by the
+    // issue #21 demo: the button then renders with undefined and stays
+    // disabled). The graph refresh button carries the same wrap.
     const graphRefreshStore = createStore(null)
     function GraphRefreshButton() {
-      const refresh = useStore(graphRefreshStore)
-      return h('button', { className: 'rsb-act rsb-icon-act', title: 'Refresh graph', 'aria-label': 'Refresh graph', disabled: !refresh, onClick: () => { if (refresh) refresh() } }, h(GitIcon, { name: 'refresh' }))
+      const action = useStore(graphRefreshStore)
+      return h('button', { className: 'rsb-act rsb-icon-act', title: 'Refresh graph', 'aria-label': 'Refresh graph', disabled: !action, onClick: () => { if (action) action.run() } }, h(GitIcon, { name: 'refresh' }))
+    }
+
+    const explorerCollapseStore = createStore(null)
+    function ExplorerCollapseButton() {
+      const action = useStore(explorerCollapseStore)
+      return h('button', { className: 'rsb-act rsb-icon-act', title: 'Collapse all folders', 'aria-label': 'Collapse all folders', disabled: !action, onClick: () => { if (action) action.run() } }, h(GitIcon, { name: 'collapse' }))
     }
 
     // Pending-commit rows (merge conflicts, staged, unstaged) share one
@@ -920,8 +935,8 @@ const XTERM = (function () {
       inst.refresh = () => load(0, true)
       React.useEffect(() => {
         const refresh = () => inst.refresh()
-        graphRefreshStore.set(refresh)
-        return () => { if (graphRefreshStore.get() === refresh) graphRefreshStore.set(null) }
+        graphRefreshStore.set({ run: refresh })
+        return () => { const cur = graphRefreshStore.get(); if (cur && cur.run === refresh) graphRefreshStore.set(null) }
       }, [])
 
       React.useEffect(() => {
@@ -1104,6 +1119,22 @@ const XTERM = (function () {
         return ctx.interval(() => { refresh() }, 3000)
       }, [])
 
+      // Collapse every expanded folder at once: the expanded set empties
+      // and the listings below the root are dropped — each folder's own
+      // cache goes with them, so re-expansion lists fresh data. The root
+      // listing stays so the card never flashes.
+      function collapseAll() {
+        setTree((cur) => {
+          const byPath = {}
+          if (cur.byPath['']) byPath[''] = cur.byPath['']
+          return { expanded: new Set(), byPath }
+        })
+      }
+      React.useEffect(() => {
+        explorerCollapseStore.set({ run: collapseAll })
+        return () => explorerCollapseStore.set(null)
+      }, [])
+
       function toggleDir(p) {
         const expanded = new Set(inst.expanded)
         const wasExpanded = expanded.has(p)
@@ -1197,7 +1228,7 @@ const XTERM = (function () {
     const CARD_MANIFEST = [
       { id: 'git-status', title: 'Source Control', order: 10, render: GitStatusCard },
       { id: 'git-graph', title: 'Commit Graph', order: 20, render: GitGraphCard, headerAction: GraphRefreshButton },
-      { id: 'explorer', title: 'Explorer', order: 30, render: ExplorerCard },
+      { id: 'explorer', title: 'Explorer', order: 30, render: ExplorerCard, headerAction: ExplorerCollapseButton },
     ]
 
     function SidebarPanel(props) {

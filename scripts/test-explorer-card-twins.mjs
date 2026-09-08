@@ -19,7 +19,7 @@ const sources = await Promise.all(
 )
 
 for (const { file, source } of sources) {
-  assert.match(source, /\{ id: 'explorer', title: 'Explorer', order: 30, render: ExplorerCard \}/, file + ': the Explorer must join the Card Manifest last, visible by default')
+  assert.match(source, /\{ id: 'explorer', title: 'Explorer', order: 30, render: ExplorerCard, headerAction: ExplorerCollapseButton \}/, file + ': the Explorer must join the Card Manifest last, visible by default, with its collapse-all head button')
   assert.match(source, /const pendingOpenStore = createStore\(\[\]\)/, file + ': the ADR 0007 pending-open store must exist at plugin scope')
   assert.match(source, /function requestPreview\(path\) \{/, file + ': the file-select seam must be a named function')
   assert.match(source, /pendingOpenStore\.set\(pendingOpenStore\.get\(\)\.concat\(\[\{ path: p \}\]\)\)/, file + ': a file select must enqueue one path request')
@@ -34,6 +34,12 @@ for (const { file, source } of sources) {
   // ever defining it, so any Panel render with tabs crashed. Both twins must
   // define it inside BottomPanel.
   assert.match(source, /function tabChipOf\(tab\) \{/, file + ': the strip-chip helper must be defined, not only used')
+  assert.match(source, /const explorerCollapseStore = createStore\(null\)/, file + ': the collapse-all action rides a store like the graph refresh')
+  assert.match(source, /function ExplorerCollapseButton\(/, file + ': the Explorer head must carry a collapse-all button')
+  assert.match(source, /headerAction: ExplorerCollapseButton/, file + ': the collapse-all button must ride the manifest headerAction seam')
+  assert.match(source, /collapse: \[/, file + ': the shared icon set must carry the collapse glyph')
+  assert.match(source, /explorerCollapseStore\.set\(\{ run: collapseAll \}\)/, file + ': the published action must ride inside { run } — a bare function would be CALLED by React as a functional update')
+  assert.match(source, /graphRefreshStore\.set\(\{ run: refresh \}\)/, file + ': the graph refresh action must ride inside { run } for the same reason')
 }
 
 // The composition client mounts the Typert remote and a call facade.
