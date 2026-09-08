@@ -4,7 +4,7 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.5.0] - 2026-09-08
 
 ### Added
 
@@ -19,10 +19,19 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
   file opens a read-only preview Panel Tab — one tab per file, a repeat
   select focuses the open tab, and a `.md`/`.markdown` file opens as a
   Markdown preview. The Card→Panel seam is a pending-open store drained by
-  the Panel (ADR 0007).
+  the Panel (ADR 0007). Rows draw VS Code-style inline SVG folder/file/link
+  icons, and the card head carries a collapse-all button using the codicon
+  `collapse-all` glyph.
 
 ### Fixed
 
+- Header action buttons (Commit Graph refresh, Explorer collapse-all) were
+  disabled in real React whenever their action was published as a bare
+  function: the state setter interprets function values as functional
+  updates and calls them. Actions now ride inside `{ run }`.
+- The dynamic twin's `BottomPanel` used `tabChipOf` without defining it, so
+  any Panel render with tabs crashed with "tabChipOf is not defined" in a
+  dynamic install.
 - The dynamic bundle's file preview was broken: `READ_FILE_LIMIT` was used
   in `dynamic/host.js` without ever being declared, so every readFile in a
   one-session dynamic install failed on its size probe with a
