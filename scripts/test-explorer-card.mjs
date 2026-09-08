@@ -520,14 +520,28 @@ console.log('explorer file-select preview check passed')
 }
 console.log('explorer open-panel drain check passed')
 
-// 7. The tree scroll area scrolls instead of stretching the card, and the
-//    stylesheet pins the tree row height to the constant the card renders.
+// 7. The tree scroll area scrolls instead of stretching the card, the
+//    stylesheet pins the tree row height to the constant the card renders,
+//    and every row carries an inline SVG icon (VS Code-style folder/file
+//    glyphs; files keep an empty caret column so names align).
 {
   const env = boot()
   const tree = openSidebar(env)
   const css = env.stylesheet
   assert.ok(/\.rsb-tree \{[^}]*overflow-y: auto/.test(css), 'the tree must scroll, never stretch the card')
   assert.ok(/\.rsb-tree-row \{[^}]*height: 24px; box-sizing: border-box/.test(css), 'tree rows must carry the exact height the card reserves')
+  await tick()
+  const panel = env.findClass(env.render(blankProps), 'rsb-panel')
+  const rows = env.findAll(panel, 'rsb-tree-row')
+  assert.equal(rows.length, 3, 'the root listing must render three rows')
+  for (const row of rows) {
+    assert.equal(env.findAll(row, 'rsb-tree-icon').length, 1, 'every row must render exactly one kind icon')
+    const caret = env.findClass(row, 'rsb-tree-caret')
+    assert.ok(caret, 'every row must render the caret column so file names align with folder names')
+  }
+  const dirRow = env.rowWithText(panel, 'rsb-tree-row', 'docs')
+  const fileRow = env.rowWithText(panel, 'rsb-tree-row', 'demo.html')
+  assert.ok(dirRow && fileRow, 'the fixture rows must render')
   void tree
 }
 console.log('explorer stylesheet check passed')
