@@ -4,6 +4,18 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] - 2026-09-08
+
+### Fixed
+
+- Long file names in the Source Control card overlapped the Stage and
+  Discard buttons: `.rsb-fname` grew without bound and pushed the action
+  buttons out of the row. The name now shrinks and truncates with an
+  ellipsis, the action group can no longer shrink or move, and the row
+  clips overflow. The full path is still one hover away via the row
+  tooltip. The fix is applied to both client halves (composition plugin
+  and dynamic-plugin variant).
+
 ## [0.5.0] - 2026-09-08
 
 ### Added
