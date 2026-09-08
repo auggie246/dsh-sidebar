@@ -1801,6 +1801,16 @@ const XTERM = (function () {
         const def = TAB_TYPES[tab.type]
         return def && def.render ? def.render(tab, { bindSession: bindTerminalSession }) : []
       }
+      // The strip chip reads the per-type strip hook; a type without one
+      // (Localhost URL) keeps its URL as title and label. This definition
+      // was missing from the dynamic twin — the composition half has it
+      // inside BottomPanel — so any Panel render with tabs crashed with
+      // "tabChipOf is not defined". Found by the issue #21 demo load.
+      function tabChipOf(tab) {
+        const def = TAB_TYPES[tab.type]
+        const chip = def && def.strip ? def.strip(tab) : null
+        return chip || { title: tab.url, label: tab.url }
+      }
       if (!rect) return null
       const activeTab = tabs.tabs.find((t) => t.id === tabs.active) || null
       return h('section', {

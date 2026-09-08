@@ -30,6 +30,10 @@ for (const { file, source } of sources) {
   assert.match(source, /\.rsb-tree \{[^}]*overflow-y: auto/, file + ': the tree must scroll, never stretch the card')
   assert.match(source, /\.rsb-tree-row \{[^}]*height: ' \+ TREE_ROW \+ 'px; box-sizing: border-box/, file + ': the row height must come from the TREE_ROW constant')
   assert.match(source, /previewTypeFor/, file + ': the preview type must follow the file extension (.md renders as Markdown)')
+  // Regression pin (issue #21 demo): the dynamic twin used tabChipOf without
+  // ever defining it, so any Panel render with tabs crashed. Both twins must
+  // define it inside BottomPanel.
+  assert.match(source, /function tabChipOf\(tab\) \{/, file + ': the strip-chip helper must be defined, not only used')
 }
 
 // The composition client mounts the Typert remote and a call facade.
