@@ -4,7 +4,7 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.5.2] - 2026-09-11
 
 ### Fixed
 
