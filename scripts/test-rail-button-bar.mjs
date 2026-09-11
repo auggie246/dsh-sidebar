@@ -1,9 +1,12 @@
 #!/usr/bin/env node
-// Rail button bar check: the Rail is a two-button bar (Sidebar toggle on
-// top, Panel toggle below), the Sidebar header keeps exactly one
-// toggle path, and Rail space outside the buttons is not a click target.
-// The Panel toggle's own behavior is pinned by test-bottom-panel.mjs; the
-// document stub's null querySelector makes the open Panel render nothing.
+// Toggle seat check (ADR 0008): with a session active, the two region
+// toggles move to the session-header utilities row so the floating bar can
+// never cover the shell's Turn Navigator turn-mark lane; the right-edge
+// Rail remains only on the hero (no current session). The Sidebar header
+// keeps exactly one toggle path, and Rail space outside the buttons is not
+// a click target. The Panel toggle's own behavior is pinned by
+// test-bottom-panel.mjs; the document stub's null querySelector makes the
+// open Panel render nothing.
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import vm from 'node:vm'
@@ -162,8 +165,8 @@ function svgMarkup(svg) {
   return parts.join(' ')
 }
 
-function railButtons(rail) {
-  return (rail.props.children || []).filter((child) => child && child.type === 'button')
+function toggleButtons(bar) {
+  return (bar.props.children || []).filter((child) => child && child.type === 'button')
 }
 
 function svgOf(button) {
@@ -172,8 +175,10 @@ function svgOf(button) {
 
 const overlay = registrations.get('shell.overlay')
 const details = registrations.get('details')
+const headerToggles = registrations.get('conversation.session.header.utilities')
 assert.equal(typeof overlay, 'function', 'the Rail overlay slot must be registered')
 assert.equal(typeof details, 'function', 'the Sidebar details slot must be registered')
+assert.equal(typeof headerToggles, 'function', 'the header utilities entry must be registered')
 
 const props = {
   sessionId: 'session-a',
@@ -184,25 +189,39 @@ const props = {
     return selector({ items: [{ path: '/workspace/a', sessionIds: ['session-a'] }] })
   },
 }
-
-const railNode = () => findNode(overlay(props), (node) => node.props?.className === 'rsb-rail')
-
-// 1. The Rail container is a plain div holding two stacked SVG buttons.
-let rail = railNode()
-assert.ok(rail, 'the Rail must render')
-assert.equal(rail.type, 'div', 'the Rail must be a container div, not a click target itself')
-assert.equal(rail.props.onClick, undefined, 'clicking Rail space outside the buttons must do nothing')
-const buttons = railButtons(rail)
-assert.equal(buttons.length, 2, 'the Rail must stack exactly two icon buttons')
-for (const button of buttons) {
-  const svg = svgOf(button)
-  assert.ok(svg, 'each Rail button must contain an inline SVG glyph')
-  const markup = svgMarkup(svg)
-  assert.ok(markup.includes('currentColor'), 'Rail glyphs must color with currentColor')
-  assert.doesNotMatch(markup, /#|rgb\(|hsl\(/, 'Rail glyphs must not hardcode colors')
+const heroProps = {
+  sessionId: undefined,
+  useSessions(selector) {
+    return selector({ current: undefined, byId: {} })
+  },
+  useWorkspaces(selector) {
+    return selector({ items: [] })
+  },
 }
 
-// The top glyph is a frame with the right pane filled; the second is a
+const headerBar = () => findNode(renderFunction(headerToggles, props), (node) => node.props?.className === 'rsb-header-toggles')
+
+// 1. With a session active the floating Rail is gone: the shell's Turn
+//    Navigator owns the right-edge turn-mark lane.
+assert.equal(findNode(overlay(props), (node) => node.props?.className === 'rsb-rail'), undefined, 'the floating Rail must not render while a session is active')
+
+// 2. The session-header utilities row carries the two-button group. Its
+//    container is a plain div, not a click target itself.
+let bar = headerBar()
+assert.ok(bar, 'the Header Toggles must render while a session is active')
+assert.equal(bar.type, 'div', 'the Header Toggles must be a container div, not a click target')
+assert.equal(bar.props.onClick, undefined, 'clicking space outside the buttons must do nothing')
+const buttons = toggleButtons(bar)
+assert.equal(buttons.length, 2, 'the Header Toggles must stack exactly two icon buttons')
+for (const button of buttons) {
+  const svg = svgOf(button)
+  assert.ok(svg, 'each toggle button must contain an inline SVG glyph')
+  const markup = svgMarkup(svg)
+  assert.ok(markup.includes('currentColor'), 'toggle glyphs must color with currentColor')
+  assert.doesNotMatch(markup, /#|rgb\(|hsl\(/, 'toggle glyphs must not hardcode colors')
+}
+
+// The first glyph is a frame with the right pane filled; the second is a
 // frame with the bottom pane filled.
 const sidebarSvg = svgOf(buttons[0])
 const sidebarFilled = findAll(sidebarSvg, (n) => n.type === 'rect' && n.props.fill === 'currentColor')
@@ -214,41 +233,56 @@ const panelFilled = findAll(panelSvg, (n) => n.type === 'rect' && n.props.fill =
 assert.equal(panelFilled.length, 1, 'the Panel glyph must fill exactly one pane')
 assert.ok(Number(panelFilled[0].props.y) >= 8, 'the Panel glyph must fill the bottom pane')
 
-// 2. The top button toggles the Sidebar with the Rail's existing semantics.
-assert.equal(buttons[0].props.title, 'Open workspace sidebar', 'the closed Sidebar labels its Rail button as open')
+// 3. The first button toggles the Sidebar with the Rail's semantics.
+assert.equal(buttons[0].props.title, 'Open workspace sidebar', 'the closed Sidebar labels its toggle button as open')
 assert.equal(buttons[0].props['aria-label'], 'Open workspace sidebar')
 buttons[0].props.onClick()
-rail = railNode()
-assert.equal(railButtons(rail)[0].props.title, 'Collapse workspace sidebar', 'the top button must set the open preference')
+bar = headerBar()
+assert.equal(toggleButtons(bar)[0].props.title, 'Collapse workspace sidebar', 'the first button must set the open preference')
 assert.equal(layoutCalls.at(-1), 'open', 'opening the Sidebar must open the Details Column for a started session')
-railButtons(rail)[0].props.onClick()
-rail = railNode()
-assert.equal(railButtons(rail)[0].props.title, 'Open workspace sidebar', 'the second click must set the open preference back to closed')
+toggleButtons(bar)[0].props.onClick()
+bar = headerBar()
+assert.equal(toggleButtons(bar)[0].props.title, 'Open workspace sidebar', 'the second click must set the open preference back to closed')
 assert.equal(layoutCalls.at(-1), 'close', 'closing the Sidebar must close the Details Column for a started session')
 
-// 3. The second button is the live Panel toggle; its full behavior is
+// 4. The second button is the live Panel toggle; its full behavior is
 //    pinned by test-bottom-panel.mjs. Here: enabled, titled, and clicking
 //    it must not disturb the Sidebar toggle path above.
-const panelButton = railButtons(rail)[1]
+const panelButton = toggleButtons(bar)[1]
 assert.equal(panelButton.props.disabled, undefined, 'the Panel button must be enabled now that the Panel exists')
-assert.equal(panelButton.props.title, 'Open panel', 'the closed Panel labels its Rail button as open')
+assert.equal(panelButton.props.title, 'Open panel', 'the closed Panel labels its toggle button as open')
 assert.equal(panelButton.props['aria-label'], 'Open panel')
 const callsBefore = layoutCalls.length
-const titleBefore = railButtons(rail)[0].props.title
+const titleBefore = toggleButtons(bar)[0].props.title
 panelButton.props.onClick()
-rail = railNode()
-assert.equal(railButtons(rail)[0].props.title, titleBefore, 'the Panel toggle must not change the Sidebar open preference')
+bar = headerBar()
+assert.equal(toggleButtons(bar)[0].props.title, titleBefore, 'the Panel toggle must not change the Sidebar open preference')
 assert.equal(layoutCalls.length, callsBefore, 'the Panel toggle must not change layout state')
-railButtons(rail)[1].props.onClick()
-rail = railNode()
-assert.equal(railButtons(rail)[0].props.title, titleBefore, 'the second Panel click must leave the Sidebar preference alone')
-assert.match(stylesheet, /\.rsb-rail button:disabled \{[^}]*cursor: default/, 'a disabled Rail button must not suggest interactivity')
+toggleButtons(bar)[1].props.onClick()
+bar = headerBar()
+assert.equal(toggleButtons(bar)[0].props.title, titleBefore, 'the second Panel click must leave the Sidebar preference alone')
+assert.match(stylesheet, /\.rsb-header-toggles button:disabled \{[^}]*cursor: default/, 'a disabled header toggle must not suggest interactivity')
+// On windows narrower than ~1600px the shell's @container rule would hide
+// the Turn Navigator while the Sidebar is open; the plugin un-hides it
+// because the marks reposition with the conversation width on their own.
+assert.match(stylesheet, /@container \(width<=900px\) \{[^}]*div\.eGxaPq_slot \{ display: block/, 'the Turn Navigator un-hide override must ride the stylesheet')
 
-// The Rail keeps its footprint while splitting it into two 36px targets.
+// The hero Rail keeps its footprint while splitting it into two 36px
+// targets.
 assert.match(stylesheet, /\.rsb-rail \{[^}]*height: 72px/, 'the Rail container must keep its 72px footprint')
 assert.match(stylesheet, /\.rsb-rail button \{[^}]*height: 36px/, 'the two Rail buttons must split the Rail into two 36px targets')
 
-// 4. The header keeps the settings button and loses the collapse button.
+// 5. The hero Rail is the re-entry point while no session is active; it
+//    holds the same two-button factory and keeps the Panel toggle disabled.
+const heroRail = findNode(overlay(heroProps), (node) => node.props?.className === 'rsb-rail')
+assert.ok(heroRail, 'the hero must keep the right-edge Rail')
+assert.equal(heroRail.props.onClick, undefined, 'clicking Rail space outside the buttons must do nothing')
+const heroButtons = toggleButtons(heroRail)
+assert.equal(heroButtons.length, 2, 'the hero Rail must hold the same two buttons')
+assert.equal(heroButtons[1].props.disabled, true, 'on the hero the Panel toggle stays disabled')
+assert.match(stylesheet, /\.rsb-rail button:disabled \{[^}]*cursor: default/, 'a disabled Rail button must not suggest interactivity')
+
+// 6. The header keeps the settings button and loses the collapse button.
 const headerButtons = findAll(details(props), (node) => node.type === 'button' && node.props?.className === 'rsb-iconbtn')
 assert.equal(headerButtons.length, 1, 'the header must keep exactly one icon button')
 assert.equal(headerButtons[0].props.title, 'Sidebar settings (show/hide cards)', 'the header keeps the settings button')
@@ -257,4 +291,4 @@ collectStrings(details(props), strings)
 assert.ok(!strings.some((text) => text.includes('»')), 'the header collapse button must be gone: one toggle path per region')
 assert.ok(strings.includes('⚙'), 'the header must keep the settings glyph')
 
-console.log('Rail button bar check passed')
+console.log('Toggle seat check passed')

@@ -39,7 +39,7 @@ Every git action the cards run is scoped by DSH's file sandbox to the Working Re
 
 ## Background
 
-`dsh-sidebar` is the Sidebar Package for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web. DSH Web renders a three-column shell: sessions on the left, the conversation in the center, and a Details Column on the right that the shipped GUI owns but leaves without a reachable entry point. The Sidebar occupies that column, so no reachable UI is displaced. It collapses to a Rail on the right edge and re-expands from it. A bottom Panel, modeled on the VS Code terminal panel, hosts closable Panel Tabs and is independent of the Sidebar.
+`dsh-sidebar` is the Sidebar Package for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web. DSH Web renders a three-column shell: sessions on the left, the conversation in the center, and a Details Column on the right that the shipped GUI owns but leaves without a reachable entry point. The Sidebar occupies that column, so no reachable UI is displaced. On the new-session page it collapses to a Rail on the right edge and re-expands from it; inside a session the same two region toggles live in the session header's utilities row (see [CONTEXT.md](CONTEXT.md)). A bottom Panel, modeled on the VS Code terminal panel, hosts closable Panel Tabs and is independent of the Sidebar.
 
 What you get:
 

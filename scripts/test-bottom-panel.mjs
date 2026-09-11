@@ -154,16 +154,14 @@ function findNode(node, predicate) {
   return found[0] || null
 }
 
-function railNode(root) {
-  return findNode(root, (node) => node.props?.className === 'rsb-rail')
-}
-
-function railButtons(rail) {
-  return (rail.props.children || []).filter((child) => child && child.type === 'button')
+function toggleButtonsOf(bar) {
+  return (bar.props.children || []).filter((child) => child && child.type === 'button')
 }
 
 const overlay = registrations.get('shell.overlay')
 assert.equal(typeof overlay, 'function', 'the Rail overlay slot must be registered')
+const headerToggles = registrations.get('conversation.session.header.utilities')
+assert.equal(typeof headerToggles, 'function', 'the header utilities entry must be registered')
 
 const props = {
   sessionId: 'session-a',
@@ -179,15 +177,22 @@ function panelNode(root) {
   return findNode(root, (node) => node.props?.className === 'rsb-bottom-panel')
 }
 
-// 1. Closed by default: the second Rail button is live but the Panel region
-//    is not rendered, and no layout action fires.
-let rail = railNode(overlay(props))
-assert.ok(rail, 'the Rail must render')
-let buttons = railButtons(rail)
-assert.equal(buttons.length, 2, 'the Rail must keep its two stacked buttons')
+// ADR 0008: with a session active the toggles live in the session-header
+// utilities row; the Panel itself still renders from the shell.overlay
+// occupant.
+function toggleBar() {
+  return findNode(renderFunction(headerToggles, props), (node) => node.props?.className === 'rsb-header-toggles')
+}
+
+// 1. Closed by default: the second Header Toggles button is live but the
+//    Panel region is not rendered, and no layout action fires.
+let bar = toggleBar()
+assert.ok(bar, 'the Header Toggles must render while a session is active')
+let buttons = toggleButtonsOf(bar)
+assert.equal(buttons.length, 2, 'the Header Toggles must keep their two buttons')
 let panelButton = buttons[1]
 assert.equal(panelButton.props.disabled, undefined, 'the Panel button must be enabled now that the Panel exists')
-assert.equal(panelButton.props.title, 'Open panel', 'the closed Panel labels its Rail button as open')
+assert.equal(panelButton.props.title, 'Open panel', 'the closed Panel labels its toggle button as open')
 assert.equal(panelButton.props['aria-label'], 'Open panel')
 assert.equal(panelButton.props['aria-pressed'], 'false', 'the Panel button reports not-pressed while closed')
 assert.equal(panelNode(overlay(props)), null, 'the closed Panel must render nothing')
@@ -199,8 +204,9 @@ assert.equal(layoutCalls.length, callsAfterMount, 'the closed Panel must not cha
 // 2. Opening the Panel renders a fixed region spanning the center column:
 //    the measured rect is the test's independent source of truth.
 panelButton.props.onClick()
-// First render pass runs the measuring effect; the second carries the rect.
-rail = railNode(overlay(props))
+// First render pass mounts the Panel and runs the measuring effect; the
+// second carries the rect.
+panelNode(overlay(props))
 const panelA = panelNode(overlay(props))
 assert.ok(panelA, 'the open Panel must render')
 assert.equal(panelA.type, 'section', 'the Panel is a landmark section')
@@ -246,29 +252,30 @@ assert.match(
   /div:has\(> \[data-shell-overlay\] \.rsb-bottom-panel\) > div:nth-child\(2\) \{[^}]*padding-bottom: var\(--rsb-panel-h\)/,
   'the frame center column must reserve exactly the Panel height while the Panel is open',
 )
-const railZ = Number(stylesheet.match(/\.rsb-rail \{[^}]*z-index: (\d+)/)[1])
-const panelZ = Number(stylesheet.match(/\.rsb-bottom-panel \{[^}]*z-index: (\d+)/)[1])
-assert.ok(panelZ < railZ, 'the Rail must stay above the Panel so both stay reachable')
+// The Panel and the hero-only Rail never share a screen; the in-session
+// toggles are inline header content, so nothing floats over the Panel.
+assert.doesNotMatch(stylesheet, /\.rsb-header-toggles \{[^}]*position: fixed/, 'the Header Toggles must not be a fixed overlay')
+assert.doesNotMatch(stylesheet, /\.rsb-header-toggles \{[^}]*z-index/, 'the Header Toggles must not stack over the Panel')
 
 // 5. The second click closes the Panel: the region and its reservation go.
-rail = railNode(overlay(props))
-buttons = railButtons(rail)
+bar = toggleBar()
+buttons = toggleButtonsOf(bar)
 panelButton = buttons[1]
-assert.equal(panelButton.props.title, 'Close panel', 'the open Panel labels its Rail button as close')
+assert.equal(panelButton.props.title, 'Close panel', 'the open Panel labels its toggle button as close')
 assert.equal(panelButton.props['aria-pressed'], 'true', 'the Panel button reports pressed while open')
 panelButton.props.onClick()
 assert.equal(panelNode(overlay(props)), null, 'the second click must remove the Panel region')
 
 // 6. Sidebar and Panel toggles are independent: either can be open alone
 //    and both can be open at once, without disturbing each other.
-rail = railNode(overlay(props))
-buttons = railButtons(rail)
+bar = toggleBar()
+buttons = toggleButtonsOf(bar)
 assert.equal(buttons[0].props.title, 'Open workspace sidebar', 'Panel toggling must not move the Sidebar preference')
 assert.equal(layoutCalls.length, callsAfterMount, 'Panel toggling must not fire Details Column actions')
 buttons[1].props.onClick()
 buttons[0].props.onClick()
-rail = railNode(overlay(props))
-buttons = railButtons(rail)
+bar = toggleBar()
+buttons = toggleButtonsOf(bar)
 assert.ok(panelNode(overlay(props)), 'opening the Sidebar must leave the Panel open')
 assert.equal(buttons[0].props.title, 'Collapse workspace sidebar', 'the Sidebar opens independently')
 // The Sidebar toggle fires 'open' (twice: handler + effect, per ticket #1
@@ -276,14 +283,13 @@ assert.equal(buttons[0].props.title, 'Collapse workspace sidebar', 'the Sidebar 
 assert.equal(layoutCalls.at(-1), 'open', 'opening the Sidebar still opens the Details Column for a started session')
 assert.ok(!layoutCalls.slice(callsAfterMount).includes('close'), 'Panel and Sidebar toggling must not close the Details Column')
 buttons[0].props.onClick()
-rail = railNode(overlay(props))
 assert.ok(panelNode(overlay(props)), 'closing the Sidebar must leave the Panel open')
 
 // 7. Fail-safe: without the shell frame the Panel renders nothing instead of
 //    crashing or reserving space.
 overlayLookupResult = null
-rail = railNode(overlay(props))
-buttons = railButtons(rail)
+bar = toggleBar()
+buttons = toggleButtonsOf(bar)
 buttons[1].props.onClick()
 assert.equal(panelNode(overlay(props)), null, 'without the shell frame the Panel must render nothing')
 

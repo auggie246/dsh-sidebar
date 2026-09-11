@@ -258,6 +258,9 @@ function boot(env = {}) {
   }
 
   const overlay = registrations.get('shell.overlay')
+  // ADR 0008: with a session active the region toggles live in the
+  // session-header utilities row.
+  const headerToggles = registrations.get('conversation.session.header.utilities')
   return {
     overlay,
     render(props) {
@@ -267,6 +270,7 @@ function boot(env = {}) {
       visit(tree, () => {})
       return tree
     },
+    renderToggles(props) { return renderFunction(headerToggles, props) },
     stylesheet: styleElements.map((el) => el.textContent).join('\n'),
     storage,
     layoutCalls,
@@ -287,6 +291,8 @@ function railButtons(rail) {
 // A blank session (ADR 0003): it exists, so the Panel button is live, but
 // its Details Column is hard-zeroed, so the Sidebar floats on the overlay
 // and the Rail hands down the sessions store's current session (ADR 0005).
+// ADR 0008: with a session active the toggle seat is the session-header
+// utilities row.
 const blankProps = {
   useSessions(selector) {
     return selector({ current: 'session-a', byId: { 'session-a': { blank: true } } })
@@ -300,13 +306,12 @@ const blankProps = {
 // the latest tree. Every step re-renders, the way React re-renders on each
 // state change.
 function openSidebar(env) {
-  let tree = env.render(blankProps)
-  railButtons(env.findClass(tree, 'rsb-rail'))[0].props.onClick()
+  railButtons(env.findClass(env.renderToggles(blankProps), 'rsb-header-toggles'))[0].props.onClick()
   return env.render(blankProps)
 }
 
 function openPanel(env, tree) {
-  railButtons(env.findClass(tree, 'rsb-rail'))[1].props.onClick()
+  railButtons(env.findClass(env.renderToggles(blankProps), 'rsb-header-toggles'))[1].props.onClick()
   return env.render(blankProps)
 }
 

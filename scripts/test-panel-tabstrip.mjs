@@ -173,9 +173,13 @@ function boot(env = {}) {
   }
 
   const overlay = registrations.get('shell.overlay')
+  // ADR 0008: with a session active (blank or started) the region toggles
+  // live in the session-header utilities row.
+  const headerToggles = registrations.get('conversation.session.header.utilities')
   return {
     overlay,
     render(props) { return renderFunction(overlay, props) },
+    renderToggles(props) { return renderFunction(headerToggles, props) },
     stylesheet: styleElements.map((el) => el.textContent).join('\n'),
     storage,
     layoutCalls,
@@ -221,8 +225,7 @@ const noSessionProps = {
 //    affordance, and an empty state while no Panel Tabs exist.
 {
   const env = boot()
-  let tree = env.render(startedProps)
-  railButtons(env.findClass(tree, 'rsb-rail'))[1].props.onClick()
+  railButtons(env.findClass(env.renderToggles(startedProps), 'rsb-header-toggles'))[1].props.onClick()
   env.findClass(env.render(startedProps), 'rsb-bottom-panel') // mount pass; null while rect fills
   const panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
   assert.ok(panel, 'the open Panel must render')
@@ -255,11 +258,9 @@ const noSessionProps = {
 //    session may host a terminal before its first message.
 {
   const env = boot()
-  const tree = env.render(blankSessionProps)
-  const rail = env.findClass(tree, 'rsb-rail')
-  const buttons = railButtons(rail)
-  assert.equal(buttons.length, 2, 'the Rail keeps both buttons on a blank session')
-  assert.equal(buttons[1].props.disabled, undefined, 'the Panel Rail button must be live on a blank session')
+  const buttons = railButtons(env.findClass(env.renderToggles(blankSessionProps), 'rsb-header-toggles'))
+  assert.equal(buttons.length, 2, 'the Header Toggles keep both buttons on a blank session')
+  assert.equal(buttons[1].props.disabled, undefined, 'the Panel toggle button must be live on a blank session')
   assert.equal(buttons[1].props.title, 'Open panel', 'the live button offers to open the Panel')
   assert.equal(buttons[1].props['aria-pressed'], 'false')
   buttons[1].props.onClick()
@@ -289,8 +290,8 @@ const noSessionProps = {
   env.findClass(env.render(blankSessionProps), 'rsb-bottom-panel') // mount pass; null while rect fills
   const panel = env.findClass(env.render(blankSessionProps), 'rsb-bottom-panel')
   assert.ok(panel, 'a restored open Panel must appear on a blank session')
-  assert.equal(railButtons(env.findClass(env.render(blankSessionProps), 'rsb-rail'))[1].props.disabled, undefined, 'the Rail button is live on a blank session')
-  assert.equal(railButtons(env.findClass(env.render(blankSessionProps), 'rsb-rail'))[1].props.title, 'Close panel', 'the live button reflects the open Panel')
+  assert.equal(railButtons(env.findClass(env.renderToggles(blankSessionProps), 'rsb-header-toggles'))[1].props.disabled, undefined, 'the toggle button is live on a blank session')
+  assert.equal(railButtons(env.findClass(env.renderToggles(blankSessionProps), 'rsb-header-toggles'))[1].props.title, 'Close panel', 'the live button reflects the open Panel')
 
   env.findClass(env.render(startedProps), 'rsb-bottom-panel') // mount pass; the session start remounts the Panel
   const startedPanel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')

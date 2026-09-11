@@ -177,10 +177,14 @@ function boot(env = {}) {
     },
   }
   const overlay = registrations.get('shell.overlay')
+  // ADR 0008: with a session active the region toggles live in the
+  // session-header utilities row.
+  const headerToggles = registrations.get('conversation.session.header.utilities')
 
   return {
     overlay,
     renderStarted() { return renderFunction(overlay, startedProps) },
+    renderToggles() { return renderFunction(headerToggles, startedProps) },
     get stylesheet() { return styleElements.map((el) => el.textContent).join('\n') },
     storage,
     cssVars,
@@ -201,11 +205,12 @@ function railButtons(rail) {
 
 // Render helpers that mirror the house pattern: the tree walk itself mounts
 // BottomPanel, its measuring effect fills rect on that first pass, and the
-// Panel appears on the next render + walk after the toggle.
-function openPanelViaRail(env) {
-  const tree = env.renderStarted()
-  const rail = env.findClass(tree, 'rsb-rail')
-  railButtons(rail)[1].props.onClick()
+// Panel appears on the next render + walk after the toggle. The toggle click
+// goes through the Header Toggles (ADR 0008); the Panel still renders from
+// the shell.overlay occupant.
+function openPanel(env) {
+  const bar = env.findClass(env.renderToggles(), 'rsb-header-toggles')
+  railButtons(bar)[1].props.onClick()
   env.findClass(env.renderStarted(), 'rsb-bottom-panel') // mount pass; null while rect fills
   return env.findClass(env.renderStarted(), 'rsb-bottom-panel')
 }
@@ -247,7 +252,7 @@ function storedState(env) {
 //    --rsb-panel-h, the same variable the reservation rule reads.
 {
   const env = boot()
-  const panel = openPanelViaRail(env)
+  const panel = openPanel(env)
   const handle = dragHandleOf(panel)
   assert.ok(handle, 'the open Panel must carry a top-edge drag handle')
   const captureLog = []
@@ -262,7 +267,7 @@ function storedState(env) {
 // 2. The drag clamps at the 120px minimum when dragged far down.
 {
   const env = boot()
-  const panel = openPanelViaRail(env)
+  const panel = openPanel(env)
   const handle = dragHandleOf(panel)
   handle.props.onPointerDown(pointerEvent(700, capturingTarget([])))
   handle.props.onPointerMove(pointerEvent(1100, capturingTarget([])))
@@ -274,7 +279,7 @@ function storedState(env) {
 // 3. The drag clamps at 60% of the viewport height when dragged far up.
 {
   const env = boot({ innerHeight: 600 })
-  const panel = openPanelViaRail(env)
+  const panel = openPanel(env)
   const handle = dragHandleOf(panel)
   handle.props.onPointerDown(pointerEvent(600, capturingTarget([])))
   handle.props.onPointerMove(pointerEvent(10, capturingTarget([])))
@@ -284,7 +289,7 @@ function storedState(env) {
   // A viewport shorter than 200px puts the 60% cap below the 120px floor;
   // the floor wins so the Panel stays usable.
   const env2 = boot({ innerHeight: 150 })
-  const panel2 = openPanelViaRail(env2)
+  const panel2 = openPanel(env2)
   const handle2 = dragHandleOf(panel2)
   handle2.props.onPointerDown(pointerEvent(150, capturingTarget([])))
   handle2.props.onPointerMove(pointerEvent(1, capturingTarget([])))
@@ -297,7 +302,7 @@ function storedState(env) {
 //    frame runs cancels it and flushes the final height once.
 {
   const env = boot({ deferredRaf: true })
-  const panel = openPanelViaRail(env)
+  const panel = openPanel(env)
   const handle = dragHandleOf(panel)
   handle.props.onPointerDown(pointerEvent(700, capturingTarget()))
   handle.props.onPointerMove(pointerEvent(640, capturingTarget()))
@@ -312,7 +317,7 @@ function storedState(env) {
   assert.equal(storedState(env).panelHeight, 440, 'the release persists the layout state')
   // Releasing while a frame is still pending cancels that frame and flushes.
   const env2 = boot({ deferredRaf: true })
-  const panel2 = openPanelViaRail(env2)
+  const panel2 = openPanel(env2)
   const handle2 = dragHandleOf(panel2)
   handle2.props.onPointerDown(pointerEvent(700, capturingTarget()))
   handle2.props.onPointerMove(pointerEvent(500, capturingTarget()))
@@ -326,7 +331,7 @@ function storedState(env) {
 //    stylesheet default for first paint.
 {
   const env = boot()
-  const panel = openPanelViaRail(env)
+  const panel = openPanel(env)
   const handle = dragHandleOf(panel)
   assert.equal(handle.props.role, 'separator', 'the drag handle is a separator')
   assert.equal(handle.props['aria-orientation'], 'horizontal', 'the separator is horizontal')
@@ -341,8 +346,7 @@ function storedState(env) {
   const storage = new Map()
   const env = boot({ storage })
   const tree = env.renderStarted()
-  const rail = env.findClass(tree, 'rsb-rail')
-  const buttons = railButtons(rail)
+  const buttons = railButtons(env.findClass(env.renderToggles(), 'rsb-header-toggles'))
   buttons[0].props.onClick() // open the Sidebar
   buttons[1].props.onClick() // open the Panel
   assert.deepEqual(storedState(env), { sidebarOpen: true, panelOpen: true, panelHeight: 240, sidebarWidth: 360 }, 'both toggles must persist')
@@ -354,9 +358,10 @@ function storedState(env) {
   dragHandleOf(panel).props.onPointerUp(pointerEvent(500, capturingTarget(captureLog)))
 
   const reloaded = boot({ storage })
-  const tree2 = reloaded.renderStarted()
-  const rail2 = reloaded.findClass(tree2, 'rsb-rail')
-  const buttons2 = railButtons(rail2)
+  // Walk the overlay so the Rail component mounts and its layout effect
+  // mirrors the restored preference into the Details Column.
+  reloaded.findClass(reloaded.renderStarted(), 'rsb-bottom-panel')
+  const buttons2 = railButtons(reloaded.findClass(reloaded.renderToggles(), 'rsb-header-toggles'))
   assert.equal(buttons2[0].props.title, 'Collapse workspace sidebar', 'the Sidebar must come back open after a reload')
   assert.equal(buttons2[1].props['aria-pressed'], 'true', 'the Panel must come back open after a reload')
   assert.equal(buttons2[1].props.title, 'Close panel')
@@ -384,8 +389,7 @@ function storedState(env) {
     const storage = new Map()
     storage.set(PANEL_KEY, raw)
     const env = boot({ storage })
-    const tree = env.renderStarted()
-    const buttons = railButtons(env.findClass(tree, 'rsb-rail'))
+    const buttons = railButtons(env.findClass(env.renderToggles(), 'rsb-header-toggles'))
     assert.equal(buttons[0].props.title, 'Open workspace sidebar', `a malformed payload (${raw}) must not restore an open Sidebar`)
     assert.equal(buttons[1].props['aria-pressed'], 'false', `a malformed payload (${raw}) must not restore an open Panel`)
     assert.equal(env.findClass(env.renderStarted(), 'rsb-bottom-panel'), null, `a malformed payload (${raw}) must not mount the Panel`)

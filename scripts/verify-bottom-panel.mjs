@@ -215,15 +215,15 @@ async function main() {
 
     const deadline = Date.now() + 45000
     while (Date.now() < deadline) {
-      if (await evaluate(cdp, sessionId, `!!document.querySelector('[data-shell-overlay] .rsb-rail button')`)) break
+      if (await evaluate(cdp, sessionId, `!!document.querySelector('.rsb-header-toggles button, [data-shell-overlay] .rsb-rail button')`)) break
       await sleep(500)
     }
-    if (!(await evaluate(cdp, sessionId, `!!document.querySelector('[data-shell-overlay] .rsb-rail button')`))) {
+    if (!(await evaluate(cdp, sessionId, `!!document.querySelector('.rsb-header-toggles button, [data-shell-overlay] .rsb-rail button')`))) {
       throw new Error('the Sidebar Rail did not appear on the page (plugin missing or GUI gate)')
     }
     console.log('GUI loaded; Rail found')
 
-    const panelButton = `[data-shell-overlay] .rsb-rail button:nth-of-type(2)`
+    const panelButton = `.rsb-header-toggles button:nth-of-type(2), [data-shell-overlay] .rsb-rail button:nth-of-type(2)`
     // 1. Open the Panel and check the geometry against the shell grid.
     await evaluate(cdp, sessionId, `document.querySelector('${panelButton}').click()`)
     const openDeadline = Date.now() + 5000
@@ -273,7 +273,7 @@ async function main() {
 
     // 4. Sidebar and Panel are independent: both open at once, and closing
     //    the Sidebar leaves the Panel up.
-    await evaluate(cdp, sessionId, `document.querySelector('[data-shell-overlay] .rsb-rail button:nth-of-type(1)').click()`)
+    await evaluate(cdp, sessionId, `document.querySelector('.rsb-header-toggles button:nth-of-type(1), [data-shell-overlay] .rsb-rail button:nth-of-type(1)').click()`)
     await sleep(400)
     const both = await evaluate(cdp, sessionId, `({
       sidebar: !!document.querySelector('.rsb-overlay-panel') || !document.querySelector('[data-details-collapsed]'),
@@ -282,7 +282,7 @@ async function main() {
     if (!both.panel) throw new Error('the Panel closed while the Sidebar opened')
     if (!both.sidebar) throw new Error('the Sidebar did not open alongside the Panel')
     console.log('Sidebar and Panel both open simultaneously — OK')
-    await evaluate(cdp, sessionId, `document.querySelector('[data-shell-overlay] .rsb-rail button:nth-of-type(1)').click()`)
+    await evaluate(cdp, sessionId, `document.querySelector('.rsb-header-toggles button:nth-of-type(1), [data-shell-overlay] .rsb-rail button:nth-of-type(1)').click()`)
     await sleep(400)
     if (!(await evaluate(cdp, sessionId, `!!document.querySelector('.rsb-bottom-panel')`))) {
       throw new Error('closing the Sidebar closed the Panel')

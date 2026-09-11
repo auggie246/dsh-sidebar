@@ -191,9 +191,13 @@ function boot(env = {}) {
   }
 
   const overlay = registrations.get('shell.overlay')
+  // ADR 0008: with a session active the Panel toggle lives in the
+  // session-header utilities row.
+  const headerToggles = registrations.get('conversation.session.header.utilities')
   return {
     overlay,
     render(props) { return renderFunction(overlay, props) },
+    renderToggles(props) { return renderFunction(headerToggles, props) },
     stylesheet: styleElements.map((el) => el.textContent).join('\n'),
     storage,
     layoutCalls,
@@ -228,14 +232,15 @@ const blankProps = {
   },
 }
 
-// Renders the started session, opens the Panel from the Rail unless the Rail
-// button already reports it open (a Panel restored from storage), and returns
-// the mounted Panel node. Each render pass must be traversed (findClass) for
-// the harness to run the measured-rect effect, so the "mount pass" render is
-// traversed too.
+// Renders the started session, opens the Panel from the Header Toggles
+// unless the toggle button already reports it open (a Panel restored from
+// storage), and returns the mounted Panel node. Each render pass must be
+// traversed (findClass) for the harness to run the measured-rect effect, so
+// the "mount pass" render is traversed too. ADR 0008: the toggle seat is the
+// session-header utilities row; the Panel still renders from shell.overlay.
 function openPanel(env) {
-  const tree = env.render(startedProps)
-  const buttons = railButtons(env.findClass(tree, 'rsb-rail'))
+  const tree = env.renderToggles(startedProps)
+  const buttons = railButtons(env.findClass(tree, 'rsb-header-toggles'))
   if (buttons[1].props['aria-pressed'] !== 'true') buttons[1].props.onClick()
   env.findClass(env.render(startedProps), 'rsb-bottom-panel') // mount pass; null while rect fills
   return env.findClass(env.render(startedProps), 'rsb-bottom-panel')

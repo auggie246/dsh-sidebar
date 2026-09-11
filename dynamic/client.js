@@ -2105,6 +2105,76 @@ const XTERM = (function () {
         h(SidebarPanel, props))
     }
 
+    // Region Toggles (ADR 0008): one factory builds the two-button pair —
+    // the Sidebar toggle first, the Panel toggle second — for both seats
+    // that carry them (the hero Rail and the session Header Toggles), so
+    // behavior never drifts between seats. A factory, not a component, so
+    // the pair spreads into either seat's container as direct button
+    // children. The handlers share the module-level layout handle and the
+    // two open stores. The Panel button re-checks activeSession inside
+    // onClick: the disabled attribute gates the pointer path, the check
+    // gates every path a disabled attribute cannot cover. Glyphs draw with
+    // currentColor so they follow the theme.
+    function createRegionToggleButtons(props) {
+      return [
+        h('button', {
+          key: 'sidebar',
+          title: props.open ? 'Collapse workspace sidebar' : 'Open workspace sidebar',
+          'aria-label': props.open ? 'Collapse workspace sidebar' : 'Open workspace sidebar',
+          onClick: () => {
+            if (props.open) {
+              if (props.startedSession) layout.closeDetails()
+              setSidebarOpen(false)
+            } else {
+              if (props.startedSession) layout.openDetails()
+              setSidebarOpen(true)
+            }
+          },
+        },
+        h('svg', { width: 16, height: 16, viewBox: '0 0 16 16', 'aria-hidden': 'true' },
+          h('rect', { x: '1.5', y: '2.5', width: '13', height: '11', rx: '1.5', fill: 'none', stroke: 'currentColor' }),
+          h('rect', { x: '9', y: '4.5', width: '4', height: '7', fill: 'currentColor' }))),
+        h('button', {
+          key: 'panel',
+          title: !props.activeSession ? 'Panel opens once a session exists' : props.panelOpen ? 'Close panel' : 'Open panel',
+          'aria-label': !props.activeSession ? 'Panel opens once a session exists' : props.panelOpen ? 'Close panel' : 'Open panel',
+          'aria-pressed': props.activeSession && props.panelOpen ? 'true' : 'false',
+          disabled: props.activeSession ? undefined : true,
+          onClick: () => { if (props.activeSession) setPanelOpen(!props.panelOpen) },
+        },
+        h('svg', { width: 16, height: 16, viewBox: '0 0 16 16', 'aria-hidden': 'true' },
+          h('rect', { x: '1.5', y: '2.5', width: '13', height: '11', rx: '1.5', fill: 'none', stroke: 'currentColor' }),
+          h('rect', { x: '3.5', y: '9', width: '9', height: '2.5', fill: 'currentColor' }))),
+      ]
+    }
+
+    // Header Toggles (ADR 0008): while a session is active the two region
+    // toggles live in the shell's session-header utilities row, clear of
+    // the Turn Navigator's right-edge turn-mark lane. Session state
+    // derives from the slot's props exactly the way Rail derives it.
+    function HeaderRegionToggles(props) {
+      const open = useStore(openStore)
+      const panelOpen = useStore(panelOpenStore)
+      const activeSessionId = props && props.useSessions
+        ? props.useSessions((s) => (s && s.current !== undefined ? s.current : undefined))
+        : (props && props.sessionId) || undefined
+      const startedSessionId = props && props.useSessions
+        ? props.useSessions((s) => {
+            const current = s && s.current
+            return current !== undefined && s.byId && s.byId[current] && s.byId[current].blank === false
+              ? current
+              : undefined
+          })
+        : (props && props.sessionId) || undefined
+      return h('div', { className: 'rsb-header-toggles' },
+        ...createRegionToggleButtons({
+          open: open,
+          panelOpen: panelOpen,
+          activeSession: activeSessionId !== undefined,
+          startedSession: startedSessionId !== undefined,
+        }))
+    }
+
     function Rail(props) {
       const open = useStore(openStore)
       const panelOpen = useStore(panelOpenStore)
@@ -2153,42 +2223,25 @@ const XTERM = (function () {
         : null
       if (!layout) return panel
       // Two-button Rail bar in the VS Code layout style. The top button
-      // toggles the Sidebar with the Rail's existing behavior; the second
-      // toggles the bottom Panel. The two toggles are independent: each
-      // owns its own store, and the Panel renders on every Rail return
-      // path so either region works with or without the other. Glyphs
-      // draw with currentColor so they follow the theme. The container
-      // carries no onClick: Rail space outside the buttons does nothing.
-      // The Panel button re-checks activeSession inside onClick: the
-      // disabled attribute gates the pointer path, the check gates every
-      // path a disabled attribute cannot cover.
-      const rail = h('div', { className: 'rsb-rail' },
-        h('button', {
-          title: open ? 'Collapse workspace sidebar' : 'Open workspace sidebar',
-          'aria-label': open ? 'Collapse workspace sidebar' : 'Open workspace sidebar',
-          onClick: () => {
-            if (open) {
-              if (startedSession) layout.closeDetails()
-              setSidebarOpen(false)
-            } else {
-              if (startedSession) layout.openDetails()
-              setSidebarOpen(true)
-            }
-          },
-        },
-        h('svg', { width: 16, height: 16, viewBox: '0 0 16 16', 'aria-hidden': 'true' },
-          h('rect', { x: '1.5', y: '2.5', width: '13', height: '11', rx: '1.5', fill: 'none', stroke: 'currentColor' }),
-          h('rect', { x: '9', y: '4.5', width: '4', height: '7', fill: 'currentColor' }))),
-        h('button', {
-          title: !activeSession ? 'Panel opens once a session exists' : panelOpen ? 'Close panel' : 'Open panel',
-          'aria-label': !activeSession ? 'Panel opens once a session exists' : panelOpen ? 'Close panel' : 'Open panel',
-          'aria-pressed': activeSession && panelOpen ? 'true' : 'false',
-          disabled: activeSession ? undefined : true,
-          onClick: () => { if (activeSession) setPanelOpen(!panelOpen) },
-        },
-        h('svg', { width: 16, height: 16, viewBox: '0 0 16 16', 'aria-hidden': 'true' },
-          h('rect', { x: '1.5', y: '2.5', width: '13', height: '11', rx: '1.5', fill: 'none', stroke: 'currentColor' }),
-          h('rect', { x: '3.5', y: '9', width: '9', height: '2.5', fill: 'currentColor' }))))
+      // toggles the Sidebar; the second toggles the bottom Panel. The two
+      // toggles are independent: each owns its own store, and the Panel
+      // renders on every Rail return path so either region works with or
+      // without the other. The container carries no onClick: Rail space
+      // outside the buttons does nothing. ADR 0008: the floating bar
+      // renders only while no session is active — the hero screen, where
+      // the shell's Turn Navigator does not exist. With a session the
+      // toggles live in the session-header utilities row
+      // (HeaderRegionToggles), so the bar can never cover the Navigator's
+      // right-edge turn-mark lane.
+      const rail = activeSession
+        ? null
+        : h('div', { className: 'rsb-rail' },
+          ...createRegionToggleButtons({
+            open: open,
+            panelOpen: panelOpen,
+            activeSession: activeSession,
+            startedSession: startedSession,
+          }))
       if (!open || startedSession) return h(React.Fragment, null, panel, rail)
       // The overlay Sidebar renders while a blank session has the Details
       // Column hard-zeroed, so its root-scoped slot props carry no
@@ -2219,6 +2272,22 @@ const XTERM = (function () {
       '.rsb-rail button { appearance: none; box-sizing: border-box; width: 100%; height: 36px; display: flex; align-items: center; justify-content: center; margin: 0; padding: 0; border: none; background: none; color: inherit; cursor: pointer; }',
       '.rsb-rail button:hover:not(:disabled) { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }',
       '.rsb-rail button:disabled { opacity: 0.4; cursor: default; }',
+      // Header Toggles (ADR 0008): plain inline icon buttons in the
+      // session-header utilities row — no fixed positioning, no z-index,
+      // so they can never float over the Turn Navigator lane.
+      '.rsb-header-toggles { display: inline-flex; gap: 4px; }',
+      '.rsb-header-toggles button { appearance: none; box-sizing: border-box; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; margin: 0; padding: 0; border: none; border-radius: 6px; background: none; color: var(--dsw-alias-label-secondary); cursor: pointer; }',
+      '.rsb-header-toggles button:hover:not(:disabled) { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }',
+      '.rsb-header-toggles button:disabled { opacity: 0.4; cursor: default; }',
+      // The shell hides its Turn Navigator once the conversation scroller
+      // narrows to 900px or less — an open Sidebar causes that on windows
+      // narrower than ~1600px, and some screens cannot expand. The marks
+      // reposition correctly with the conversation width on their own
+      // (they anchor to the scroller's right edge), so un-hide them: this
+      // stylesheet loads after the shell's, and the element selector wins
+      // specificity too. If a shell update renames the hashed module
+      // class, this rule no-ops and the shell's hide rule returns.
+      '@container (width<=900px) { div.eGxaPq_slot { display: block; } }',
       '.rsb-overlay-panel { position: fixed; top: 0; right: 0; bottom: 0; z-index: 59; box-sizing: border-box; width: var(--rsb-panel-w); border-left: 1px solid var(--dsw-alias-border-l1); box-shadow: -8px 0 28px rgba(0,0,0,0.2); }',
       '.rsb-docked-panel { position: relative; height: 100%; min-height: 0; }',
       // The shell handle reads its separate transient Details width. Hide it
@@ -2404,5 +2473,8 @@ const XTERM = (function () {
 
     slots.inject('details', () => slots.register({ name: 'details', priority: -1 }, (props) => h(SidebarPanel, Object.assign({}, props, { docked: true }))))
     slots.inject('shell.overlay', () => slots.register({ name: 'shell.overlay', id: 'rside-rail', label: 'Workspace sidebar' }, (props) => h(Rail, props)))
+    // ADR 0008: in-session region toggles live in the session-header
+    // utilities row; order 10 places them after the shipped entries.
+    slots.inject('conversation.session.header.utilities', () => slots.register({ name: 'conversation.session.header.utilities', id: 'rside-region-toggles', order: 10, label: 'Workspace regions' }, (props) => h(HeaderRegionToggles, props)))
   },
 }

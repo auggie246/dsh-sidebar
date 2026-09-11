@@ -266,10 +266,14 @@ function boot(env = {}) {
 
   const overlay = registrations.get('shell.overlay')
   const details = registrations.get('details')
+  // ADR 0008: with a session active the Panel toggle lives in the
+  // session-header utilities row.
+  const headerToggles = registrations.get('conversation.session.header.utilities')
   return {
     overlay,
     details,
     render(props) { return renderFunction(overlay, props) },
+    renderToggles(props) { return renderFunction(headerToggles, props) },
     renderDetails(props) {
       // Walking is what renders: the details registration must actually run
       // SidebarPanel so the cwd store publishes the Working Repository root.
@@ -338,14 +342,14 @@ const startedProps = {
   },
 }
 
-// Renders the started session, opens the Panel from the Rail unless the Rail
-// button already reports it open, and returns the mounted Panel node. Each
-// render pass must be traversed (findClass) for the harness to run the
-// measured-rect effect, so the "mount pass" render is traversed too.
+// Renders the started session, opens the Panel from the Header Toggles
+// unless the toggle button already reports it open, and returns the mounted
+// Panel node. Each render pass must be traversed (findClass) for the harness
+// to run the measured-rect effect, so the "mount pass" render is traversed
+// too. ADR 0008: the toggle seat is the session-header utilities row.
 function openPanel(env) {
-  const tree = env.render(startedProps)
-  const rail = env.findClass(tree, 'rsb-rail')
-  const buttons = (rail.props.children || []).filter((child) => child && child.type === 'button')
+  const bar = env.findClass(env.renderToggles(startedProps), 'rsb-header-toggles')
+  const buttons = (bar.props.children || []).filter((child) => child && child.type === 'button')
   if (buttons[1].props['aria-pressed'] !== 'true') buttons[1].props.onClick()
   env.findClass(env.render(startedProps), 'rsb-bottom-panel') // mount pass; null while rect fills
   return env.findClass(env.render(startedProps), 'rsb-bottom-panel')

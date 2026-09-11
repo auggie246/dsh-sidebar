@@ -220,6 +220,9 @@ function boot(env = {}) {
 
   const overlay = registrations.get('shell.overlay')
   const details = registrations.get('details')
+  // ADR 0008: with a session active the Sidebar toggle lives in the
+  // session-header utilities row.
+  const headerToggles = registrations.get('conversation.session.header.utilities')
   return {
     overlay,
     details,
@@ -227,6 +230,8 @@ function boot(env = {}) {
     windowListeners,
     renderStarted() { return renderFunction(overlay, sessionProps('session-a', false)) },
     renderBlank() { return renderFunction(overlay, sessionProps('session-blank', true)) },
+    renderTogglesStarted() { return renderFunction(headerToggles, sessionProps('session-a', false)) },
+    renderTogglesBlank() { return renderFunction(headerToggles, sessionProps('session-blank', true)) },
     renderDetails() { return renderFunction(details, sessionProps('session-a', false)) },
     get stylesheet() { return styleElements.map((el) => el.textContent).join('\n') },
     storage,
@@ -299,7 +304,7 @@ function storedState(env) {
 {
   const env = boot()
   let tree = env.renderBlank()
-  railButtons(env.findClass(tree, 'rsb-rail'))[0].props.onClick() // open the Sidebar
+  railButtons(env.findClass(env.renderTogglesBlank(), 'rsb-header-toggles'))[0].props.onClick() // open the Sidebar
   const aside = env.findClass(env.renderBlank(), 'rsb-overlay-panel')
   assert.ok(aside, 'an open Sidebar on a fresh session must render the floating overlay')
   const handle = env.findClass(aside, 'rsb-sidebar-drag')
@@ -320,7 +325,7 @@ function storedState(env) {
 //    300px at least.
 {
   const env = boot()
-  railButtons(env.findClass(env.renderBlank(), 'rsb-rail'))[0].props.onClick()
+  railButtons(env.findClass(env.renderTogglesBlank(), 'rsb-header-toggles'))[0].props.onClick()
   const handle = env.findClass(env.findClass(env.renderBlank(), 'rsb-overlay-panel'), 'rsb-sidebar-drag')
   handle.props.onPointerDown(pointerEvent(400, capturingTarget([])))
   handle.props.onPointerMove(pointerEvent(-500, capturingTarget([])))
@@ -328,7 +333,7 @@ function storedState(env) {
   assert.equal(lastWidth(env), 'min(520px, calc(100vw - 22px))', 'the Sidebar width must clamp to the 520px maximum')
   assert.equal(storedState(env).sidebarWidth, 520, 'the clamped width is what gets persisted')
   const env2 = boot()
-  railButtons(env2.findClass(env2.renderBlank(), 'rsb-rail'))[0].props.onClick()
+  railButtons(env2.findClass(env2.renderTogglesBlank(), 'rsb-header-toggles'))[0].props.onClick()
   const handle2 = env2.findClass(env2.findClass(env2.renderBlank(), 'rsb-overlay-panel'), 'rsb-sidebar-drag')
   handle2.props.onPointerDown(pointerEvent(400, capturingTarget([])))
   handle2.props.onPointerMove(pointerEvent(2000, capturingTarget([])))
@@ -401,8 +406,10 @@ function storedState(env) {
 //    read from the track the shell's final setDetails commit wrote.
 {
   const env = boot() // no deferred raf: the pointerup persist runs inline
-  railButtons(env.findClass(env.renderStarted(), 'rsb-rail'))[0].props.onClick() // open on a started session
-  env.findClass(env.renderStarted(), 'rsb-rail') // re-render with the open state; the capture attaches
+  railButtons(env.findClass(env.renderTogglesStarted(), 'rsb-header-toggles'))[0].props.onClick() // open on a started session
+  // Walk the re-rendered overlay so the Rail component mounts with the open
+  // state; the capture attaches from its layout effect.
+  env.findClass(env.renderStarted(), 'rsb-bottom-panel')
   assert.ok((env.frameListeners['pointerdown'] || []).length > 0, 'an open docked Sidebar must delegate pointerdown on the frame')
   assert.ok((env.windowListeners['pointerup'] || []).length > 0, 'the release must be observed on the window')
   // The shell's final setDetails commit writes the settled track.

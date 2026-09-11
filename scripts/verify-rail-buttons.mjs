@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// GUI-level verification for ticket #1 (Rail button bar): the running GUI must
-// serve a client bundle whose Rail is the two-button bar with currentColor
-// glyphs, no `»` header collapse control, and the inert Panel button.
+// GUI-level verification for ticket #1 (Rail button bar) and ADR 0008 (toggle
+// seats): the running GUI must serve a client bundle whose hero Rail is the
+// two-button bar with currentColor glyphs, whose in-session Header Toggles
+// register on the session-header utilities row, with no `»` header collapse
+// control, and the inert Panel button title.
 const baseUrl = process.env.DSH_WEB_URL ?? 'http://127.0.0.1:3080'
 const response = await fetch(baseUrl)
 const html = await response.text()
@@ -50,15 +52,17 @@ function fail(message) {
   console.error(`Rail button bar check FAILED: ${message}`)
   process.exit(1)
 }
-if (!/h\('div', \{ className: 'rsb-rail' \}/.test(bundle)) fail('the Rail container div was not found')
-if (!bundle.includes("'Panel is not available yet'")) fail('the inert Panel button was not found')
-if (!bundle.includes("disabled: true")) fail('the Panel button is not disabled')
+if (!/h\('div', \{ className: 'rsb-rail' \}/.test(bundle)) fail('the hero Rail container div was not found')
+if (!/h\('div', \{ className: 'rsb-header-toggles' \}/.test(bundle)) fail('the Header Toggles container div was not found')
+if (!bundle.includes("'conversation.session.header.utilities'")) fail('the header utilities registration is missing')
+if (!bundle.includes("'Panel opens once a session exists'")) fail('the inert Panel button title was not found')
 if (bundle.includes("'Collapse sidebar'")) fail('the » header collapse control is still present')
 if (bundle.includes("'»'")) fail('the » glyph is still rendered somewhere')
 if (!bundle.includes('fill: \'currentColor\'') || !bundle.includes('stroke: \'currentColor\'')) {
   fail('the glyphs do not draw with currentColor')
 }
-if (!bundle.includes('.rsb-rail button:disabled')) fail('the disabled-button style is missing')
+if (!bundle.includes('.rsb-rail button:disabled')) fail('the disabled Rail button style is missing')
 if (!/rsb-rail button \{[^}]*height: 36px/.test(bundle)) fail('the two stacked 36px button targets are missing')
+if (!bundle.includes('.rsb-header-toggles button:disabled')) fail('the disabled Header Toggles button style is missing')
 
-console.log('Rail button bar check passed: the running GUI serves the two-button Rail')
+console.log('Toggle seat check passed: the running GUI serves the hero Rail and the in-session Header Toggles')

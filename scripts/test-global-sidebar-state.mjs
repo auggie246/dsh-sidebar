@@ -115,11 +115,13 @@ function findNode(node, predicate) {
   return findNode(node.props?.children, predicate)
 }
 
-// The Rail is a two-button bar (ticket #1): the container div has no onClick
-// and no title, so tests drive the first button child — the Sidebar toggle.
-function railToggle(railNode) {
-  const buttons = (railNode.props?.children || []).filter((child) => child && child.type === 'button')
-  assert.equal(buttons.length, 2, 'the Rail must hold exactly two stacked buttons')
+// The region toggles are a two-button group (ticket #1, ADR 0008): with a
+// session active they live in the session-header utilities row, whose
+// container div has no onClick, so tests drive the first button child —
+// the Sidebar toggle.
+function sidebarToggleOf(bar) {
+  const buttons = (bar.props?.children || []).filter((child) => child && child.type === 'button')
+  assert.equal(buttons.length, 2, 'the Header Toggles must hold exactly two buttons')
   return buttons[0]
 }
 
@@ -137,30 +139,42 @@ function sessionProps(sessionId, path) {
 
 const details = registrations.get('details')
 const overlay = registrations.get('shell.overlay')
+const headerToggles = registrations.get('conversation.session.header.utilities')
 assert.equal(typeof details, 'function', 'the Sidebar details slot must be registered')
 assert.equal(typeof overlay, 'function', 'the Rail overlay slot must be registered')
+assert.equal(typeof headerToggles, 'function', 'the header utilities entry must be registered')
+// ADR 0008: with a session active the toggles are read from the Header
+// Toggles bar rendered by the session-header utilities entry.
+function toggleBar(props) {
+  return findNode(renderFunction(headerToggles, props), (node) => node.props?.className === 'rsb-header-toggles')
+}
 
 const sessionA = sessionProps('session-a', '/workspace/a')
 // The `»` header collapse control is gone (ticket #1): the globally collapsed
-// baseline is now the store's initial state, so the first Rail render must
+// baseline is now the store's initial state, so the first toggle render must
 // already read 'Open workspace sidebar'.
-let rail = findNode(overlay(sessionA), (node) => node.props?.className === 'rsb-rail')
-assert.equal(railToggle(rail).props.title, 'Open workspace sidebar', 'the Sidebar must start globally collapsed')
+let bar = toggleBar(sessionA)
+assert.equal(sidebarToggleOf(bar).props.title, 'Open workspace sidebar', 'the Sidebar must start globally collapsed')
+// The floating Rail is gone whenever a session is active.
+assert.equal(findNode(overlay(sessionA), (node) => node.props?.className === 'rsb-rail'), null, 'the floating Rail must not render while a session is active')
 
 const sessionB = sessionProps('session-b', '/workspace/b')
 const secondPanelElement = details(sessionB)
 renderFunction(secondPanelElement.type, secondPanelElement.props)
-rail = findNode(overlay(sessionB), (node) => node.props?.className === 'rsb-rail')
+// The layout effect lives in the shell.overlay Rail: rendering the overlay
+// for the new session mirrors the global preference into its Details Column.
+findNode(overlay(sessionB), (node) => node.props?.className === 'rsb-bottom-panel')
+bar = toggleBar(sessionB)
 assert.equal(
-  railToggle(rail).props.title,
+  sidebarToggleOf(bar).props.title,
   'Open workspace sidebar',
   'switching sessions must preserve the globally collapsed Sidebar preference',
 )
 assert.equal(layoutCalls.includes('open'), false, 'switching sessions must not reopen a globally collapsed Details Column')
 
-railToggle(rail).props.onClick()
-rail = findNode(overlay(sessionB), (node) => node.props?.className === 'rsb-rail')
-assert.equal(railToggle(rail).props.title, 'Collapse workspace sidebar', 'opening the Sidebar must update the global preference')
+sidebarToggleOf(bar).props.onClick()
+bar = toggleBar(sessionB)
+assert.equal(sidebarToggleOf(bar).props.title, 'Collapse workspace sidebar', 'opening the Sidebar must update the global preference')
 assert.equal(layoutCalls.at(-1), 'open', 'opening the Sidebar must open the current Details Column')
 
 layout.closeDetails()
@@ -168,9 +182,13 @@ unmountFunction(secondPanelElement.type)
 const sessionC = sessionProps('session-c', '/workspace/c')
 const thirdPanelElement = details(sessionC)
 renderFunction(thirdPanelElement.type, thirdPanelElement.props)
-rail = findNode(overlay(sessionC), (node) => node.props?.className === 'rsb-rail')
+// The layout effect lives in the shell.overlay Rail: rendering the overlay
+// for the new session reopens its Details Column for a globally open
+// Sidebar.
+findNode(overlay(sessionC), (node) => node.props?.className === 'rsb-bottom-panel')
+bar = toggleBar(sessionC)
 assert.equal(
-  railToggle(rail).props.title,
+  sidebarToggleOf(bar).props.title,
   'Collapse workspace sidebar',
   'switching sessions must preserve the globally open Sidebar preference',
 )

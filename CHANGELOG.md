@@ -4,6 +4,30 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- The right-edge Rail overlapped the DSH Turn Navigator: its two region
+  toggles floated (`position: fixed`, vertically centered, z-index 60) over
+  the turn-mark lane the navigator renders in the rightmost strip of the
+  conversation, covering the marks and stealing their clicks. While a
+  session is active the Sidebar and Panel toggles now render in the shell's
+  `conversation.session.header.utilities` row — plain inline content, no
+  floating overlap possible. The edge Rail remains only on the hero page,
+  where no session is active and the Turn Navigator does not exist. Both
+  client halves (composition plugin and dynamic-plugin variant) carry the
+  change; see ADR 0008.
+- The Turn Navigator vanished whenever the Sidebar was open on windows
+  narrower than ~1600px: the shell hides it through an
+  `@container (width<=900px)` rule once the open Sidebar narrows the
+  conversation past that width. The marks reposition with the conversation
+  on their own, so the plugin now counter-rules the hide
+  (`div.eGxaPq_slot { display: block }` inside the same container
+  condition), loading after the shell's bundle and at higher specificity.
+  If a shell update renames the hashed class, the override no-ops and the
+  shell behavior returns.
+
 ## [0.5.1] - 2026-09-08
 
 ### Fixed

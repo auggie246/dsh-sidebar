@@ -2,9 +2,9 @@
 
 ## Vocabulary
 
-See [CONTEXT.md](../CONTEXT.md) for the glossary (Sidebar, Rail, Card,
-Card Manifest, Sidebar Settings, Details Column, Working Repository,
-Explorer).
+See [CONTEXT.md](../CONTEXT.md) for the glossary (Sidebar, Rail, Header
+Toggles, Card, Card Manifest, Sidebar Settings, Details Column,
+Working Repository, Explorer).
 
 ## Key decisions
 
@@ -12,9 +12,14 @@ Explorer).
   slot is the only real right-hand grid column; in current builds its shipped
   occupant (the tool-call output viewer) has no entry point and is never
   opened, so occupying it displaces no reachable UI.
-- **Always-on Rail via `shell.overlay`.** The layout owns whether the
-  Details Column is open, so the re-entry point lives on the frame-wide
-  overlay layer, pinned to the right edge.
+- **Hero-only Rail via `shell.overlay`; in-session Header Toggles.** The
+  layout owns whether the Details Column is open, so the re-entry point
+  lives on the frame-wide overlay layer, pinned to the right edge. A
+  permanent floating bar there covers the shell's Turn Navigator turn-mark
+  lane, so the Rail renders only while no session is active; with a session
+  the same two-button pair renders in the session-header utilities row
+  (ADR 0008). The overlay occupant still mounts the regions — the bottom
+  Panel and the blank-session overlay Sidebar — in every state.
 - **New sessions: reserved-width overlay.** The shell hard-zeros the Details
   Column until the current session is started (`blank === false`), so before
   the first message the Sidebar cannot dock. In that state the Sidebar floats

@@ -188,7 +188,7 @@ async function main() {
     await cdp.send('Page.navigate', { url: baseUrl }, sessionId)
     await cdp.waitEvent('Page.loadEventFired', sessionId).catch(() => {})
 
-    await waitFor(cdp, sessionId, `!!document.querySelector('[data-shell-overlay] .rsb-rail button')`, 'the Sidebar Rail to appear', 45000)
+    await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-header-toggles button, [data-shell-overlay] .rsb-rail button')`, 'the Sidebar Rail to appear', 45000)
     console.log('GUI loaded; Rail found')
 
     // --- ADR 0003: create a session and DO NOT send a message. The Panel
@@ -206,7 +206,7 @@ async function main() {
     if (!clicked) throw new Error('could not open a new session from the GUI')
     await waitFor(cdp, sessionId, `!!document.querySelector('textarea[placeholder="Describe what you want to build"]')`, 'the composer to appear', 20000)
 
-    const panelButton = `document.querySelector('[data-shell-overlay] .rsb-rail button:nth-of-type(2)')`
+    const panelButton = `document.querySelector('.rsb-header-toggles button:nth-of-type(2), [data-shell-overlay] .rsb-rail button:nth-of-type(2)')`
     await waitFor(cdp, sessionId, `(() => { const b = ${panelButton}; return !!b && !b.disabled })()`,
       'the Panel Rail button to enable on the blank session (ADR 0003)', 15000)
     const title = await evaluate(cdp, sessionId, `${panelButton}.title`)
@@ -226,7 +226,7 @@ async function main() {
     // preference closed, so open it first.
     await waitFor(cdp, sessionId, `(() => {
       if (!window.__rsbSidebarLatch) {
-        const b = document.querySelector('[data-shell-overlay] .rsb-rail button')
+        const b = document.querySelector('.rsb-header-toggles button, [data-shell-overlay] .rsb-rail button')
         if (b && (b.title || '').includes('Open workspace sidebar')) { window.__rsbSidebarLatch = true; b.click() }
         return false
       }

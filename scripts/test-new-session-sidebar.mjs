@@ -160,12 +160,21 @@ function findComponent(node, name) {
   return findComponent(node.props?.children, name)
 }
 
-// The Rail is a two-button bar (ticket #1): the container div has no onClick,
-// so tests drive the first button child — the Sidebar toggle.
-function railToggle(railNode) {
-  const buttons = (railNode.props?.children || []).filter((child) => child && child.type === 'button')
-  assert.equal(buttons.length, 2, 'the Rail must hold exactly two stacked buttons')
+// The region toggles are a two-button group (ticket #1, ADR 0008): whichever
+// seat carries them (hero Rail or session Header Toggles), the container div
+// has no onClick, so tests drive the first button child — the Sidebar toggle.
+function sidebarToggleOf(bar) {
+  const buttons = (bar.props?.children || []).filter((child) => child && child.type === 'button')
+  assert.equal(buttons.length, 2, 'the toggle bar must hold exactly two buttons')
   return buttons[0]
+}
+
+// ADR 0008: with a session active — even a blank one — the floating Rail is
+// gone and the toggles live in the session-header utilities row.
+const headerToggles = registrations.get('conversation.session.header.utilities')
+assert.equal(typeof headerToggles, 'function', 'the header utilities entry must be registered')
+function headerToggleBar(props) {
+  return findClass(renderFunction(headerToggles, props), 'rsb-header-toggles')
 }
 
 const overlay = registrations.get('shell.overlay')
@@ -183,7 +192,7 @@ const props = {
 let tree = renderFunction(overlay, props)
 const rail = findClass(tree, 'rsb-rail')
 assert.ok(rail, 'the Rail must render on the new session page')
-railToggle(rail).props.onClick()
+sidebarToggleOf(rail).props.onClick()
 
 tree = renderFunction(overlay, props)
 const panel = findClass(tree, 'rsb-overlay-panel')
@@ -212,7 +221,7 @@ assert.match(
 // dropping the hook state models the re-render React performs after the
 // store notifies subscribers.
 const openRail = findClass(tree, 'rsb-rail')
-railToggle(openRail).props.onClick()
+sidebarToggleOf(openRail).props.onClick()
 hookState.clear()
 tree = renderFunction(overlay, props)
 assert.equal(findClass(tree, 'rsb-overlay-panel'), null, 'clicking the Rail again must collapse the Sidebar')
@@ -235,7 +244,10 @@ const newSessionProps = {
   },
 }
 tree = renderFunction(overlay, newSessionProps)
-railToggle(findClass(tree, 'rsb-rail')).props.onClick()
+assert.equal(findClass(tree, 'rsb-rail'), null, 'with a session active the floating Rail must not render')
+const toggles = headerToggleBar(newSessionProps)
+assert.ok(toggles, 'the Header Toggles must render for the blank session')
+sidebarToggleOf(toggles).props.onClick()
 // Dropping the hook state models the re-render React performs after the
 // store notifies subscribers, and remounts the cards for the new render.
 hookState.clear()

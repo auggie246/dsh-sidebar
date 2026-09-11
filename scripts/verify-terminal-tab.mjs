@@ -273,7 +273,7 @@ async function main() {
     await cdp.send('Page.navigate', { url: baseUrl }, sessionId)
     await cdp.waitEvent('Page.loadEventFired', sessionId).catch(() => {})
 
-    await waitFor(cdp, sessionId, `!!document.querySelector('[data-shell-overlay] .rsb-rail button')`, 'the Sidebar Rail to appear', 45000)
+    await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-header-toggles button, [data-shell-overlay] .rsb-rail button')`, 'the Sidebar Rail to appear', 45000)
     console.log('GUI loaded; Rail found')
 
     // A fresh verifier profile has no current session, so the Panel Rail
@@ -282,7 +282,7 @@ async function main() {
     // message through the composer, then the session is running and the
     // Rail's Panel button enables. The bootstrap session lives in the
     // Working Repository, so file previews resolve repo-relative paths.
-    if (await evaluate(cdp, sessionId, `(() => { const b = document.querySelector('[data-shell-overlay] .rsb-rail button:nth-of-type(2)'); return !b || b.disabled })()`)) {
+    if (await evaluate(cdp, sessionId, `(() => { const b = document.querySelector('.rsb-header-toggles button:nth-of-type(2), [data-shell-overlay] .rsb-rail button:nth-of-type(2)'); return !b || b.disabled })()`)) {
       // The workspace tree renders in its own time and the dsh-sidebar
       // group may start collapsed (its New session button only exists once
       // the group is expanded). Poll: wait for the button, expanding the
@@ -313,14 +313,14 @@ async function main() {
         await waitFor(cdp, sessionId, `(() => { const b = Array.from(document.querySelectorAll('button')).find((e) => (e.getAttribute('aria-label') || '') === 'Send message'); return !!b && !b.disabled })()`, 'the Send message button to enable', 10000)
         await evaluate(cdp, sessionId, `(() => { const b = Array.from(document.querySelectorAll('button')).find((e) => (e.getAttribute('aria-label') || '') === 'Send message'); if (!b) return false; b.click(); return true })()`)
         try {
-          await waitFor(cdp, sessionId, `(() => { const b = document.querySelector('[data-shell-overlay] .rsb-rail button:nth-of-type(2)'); return !!b && !b.disabled })()`, 'the bootstrap session to start', 20000)
+          await waitFor(cdp, sessionId, `(() => { const b = document.querySelector('.rsb-header-toggles button:nth-of-type(2), [data-shell-overlay] .rsb-rail button:nth-of-type(2)'); return !!b && !b.disabled })()`, 'the bootstrap session to start', 20000)
           started = true
         } catch (e) { /* the send click can race the composer wiring; retry */ }
       }
       if (!started) throw new Error('the bootstrap session never started after 3 attempts')
       console.log('bootstrap session started; Rail Panel button enabled')
     }
-    const panelButton = `[data-shell-overlay] .rsb-rail button:nth-of-type(2)`
+    const panelButton = `.rsb-header-toggles button:nth-of-type(2), [data-shell-overlay] .rsb-rail button:nth-of-type(2)`
     const gate = await evaluate(cdp, sessionId, `(() => {
       const b = document.querySelector('${panelButton}')
       return { disabled: b?.disabled ?? null, title: b?.title ?? '' }
@@ -414,7 +414,7 @@ async function main() {
       chip.click()
     })()`)
     await evaluate(cdp, sessionId, `location.reload()`)
-    await waitFor(cdp, sessionId, `!!document.querySelector('[data-shell-overlay] .rsb-rail button')`, 'the Rail after reload', 45000)
+    await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-header-toggles button, [data-shell-overlay] .rsb-rail button')`, 'the Rail after reload', 45000)
     await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-bottom-panel')`, 'the restored open Panel', 10000)
     await waitFor(cdp, sessionId, `document.querySelectorAll('.rsb-tab').length === 2`, 'both stored tabs to restore', 10000)
     await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-term .xterm')`, 'the restored terminal to re-attach through xterm', 15000)
@@ -479,7 +479,7 @@ async function main() {
       localStorage.setItem(key, JSON.stringify(state))
     })()`)
     await evaluate(cdp, sessionId, `location.reload()`)
-    await waitFor(cdp, sessionId, `!!document.querySelector('[data-shell-overlay] .rsb-rail button')`, 'the Rail after reload', 45000)
+    await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-header-toggles button, [data-shell-overlay] .rsb-rail button')`, 'the Rail after reload', 45000)
     await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-bottom-panel')`, 'the Panel after reload', 10000)
     await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-bottom-panel .rsb-term-dead')`, 'the dead-session placeholder to render', 10000)
     const deadText = await evaluate(cdp, sessionId, `document.querySelector('.rsb-bottom-panel .rsb-term-dead')?.textContent ?? ''`)
