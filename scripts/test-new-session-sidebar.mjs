@@ -243,16 +243,18 @@ const newSessionProps = {
   },
 }
 tree = renderFunction(overlay, newSessionProps)
-const newSessionRail = findClass(tree, 'rsb-rail')
-assert.ok(newSessionRail, 'the Rail must render while the blank session header is hidden')
-const newSessionButtons = (newSessionRail.props?.children || []).filter((child) => child && child.type === 'button')
+const newSessionToggles = findClass(tree, 'rsb-header-toggles-blank')
+assert.ok(newSessionToggles, 'a blank session must render header-style toggles at the top-right')
+assert.ok(newSessionToggles.props.className.split(' ').includes('rsb-header-toggles'), 'blank-session toggles must share the Header Toggles appearance')
+assert.match(stylesheet, /\.rsb-header-toggles-blank \{[^}]*position: fixed;[^}]*top: 14px;[^}]*right: 28px/, 'blank-session toggles must match the session header position')
+const newSessionButtons = (newSessionToggles.props?.children || []).filter((child) => child && child.type === 'button')
 assert.equal(newSessionButtons[1].props.disabled, undefined, 'the Panel toggle must be live in a blank session')
 newSessionButtons[1].props.onClick()
-assert.ok(findComponent(renderFunction(overlay, newSessionProps), 'BottomPanel'), 'the Rail must open the Panel in a blank session')
-const openPanelRail = findClass(renderFunction(overlay, newSessionProps), 'rsb-rail')
-const openPanelButtons = (openPanelRail.props?.children || []).filter((child) => child && child.type === 'button')
+assert.ok(findComponent(renderFunction(overlay, newSessionProps), 'BottomPanel'), 'the blank-session toggles must open the Panel')
+const openPanelToggles = findClass(renderFunction(overlay, newSessionProps), 'rsb-header-toggles-blank')
+const openPanelButtons = (openPanelToggles.props?.children || []).filter((child) => child && child.type === 'button')
 openPanelButtons[1].props.onClick()
-sidebarToggleOf(newSessionRail).props.onClick()
+sidebarToggleOf(newSessionToggles).props.onClick()
 // Dropping the hook state models the re-render React performs after the
 // store notifies subscribers, and remounts the cards for the new render.
 hookState.clear()

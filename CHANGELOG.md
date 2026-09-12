@@ -8,9 +8,10 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ### Fixed
 
-- New blank sessions keep the right-edge Rail until DSH shows the session
-  header. The Sidebar and Panel therefore remain available before the first
-  message, without restoring the Turn Navigator overlap in started sessions.
+- New blank sessions show header-style Sidebar and Panel toggles at the
+  top-right until DSH shows the real session header. Both regions remain
+  available before the first message, without the old centered-to-header
+  position jump or the Turn Navigator overlap in started sessions.
 
 ## [0.5.2] - 2026-09-11
 

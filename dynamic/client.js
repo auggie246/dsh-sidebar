@@ -2222,20 +2222,15 @@ const XTERM = (function () {
         ? h(BottomPanel, { key: activeSessionId, sessionId: activeSessionId })
         : null
       if (!layout) return panel
-      // Two-button Rail bar in the VS Code layout style. The top button
-      // toggles the Sidebar; the second toggles the bottom Panel. The two
-      // toggles are independent: each owns its own store, and the Panel
-      // renders on every Rail return path so either region works with or
-      // without the other. The container carries no onClick: Rail space
-      // outside the buttons does nothing. ADR 0008: the floating bar
-      // renders on the hero and while a new session remains blank. DSH
-      // hides the session header while blank, and the Turn Navigator does
-      // not exist there. Once the first message starts, HeaderRegionToggles
-      // replaces the Rail clear of the Navigator's right-edge turn-mark
-      // lane.
+      // Region toggles remain available whenever the session header is
+      // hidden. The hero keeps its right-edge Rail. A blank session uses
+      // the Header Toggles appearance and top-right position, so controls
+      // do not jump across the page when the first message starts. Started
+      // sessions render HeaderRegionToggles inside the real header, clear
+      // of the Turn Navigator's right-edge turn-mark lane (ADR 0008).
       const rail = startedSession
         ? null
-        : h('div', { className: 'rsb-rail' },
+        : h('div', { className: activeSession ? 'rsb-header-toggles rsb-header-toggles-blank' : 'rsb-rail' },
           ...createRegionToggleButtons({
             open: open,
             panelOpen: panelOpen,
@@ -2273,9 +2268,11 @@ const XTERM = (function () {
       '.rsb-rail button:hover:not(:disabled) { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }',
       '.rsb-rail button:disabled { opacity: 0.4; cursor: default; }',
       // Header Toggles (ADR 0008): plain inline icon buttons in the
-      // session-header utilities row — no fixed positioning, no z-index,
-      // so they can never float over the Turn Navigator lane.
+      // session-header utilities row. While DSH hides that row for a blank
+      // session, its overlay copy uses the header's 14px/28px top-right
+      // button position. The Turn Navigator does not exist in that state.
       '.rsb-header-toggles { display: inline-flex; gap: 4px; }',
+      '.rsb-header-toggles-blank { position: fixed; top: 14px; right: 28px; z-index: 60; pointer-events: auto; }',
       '.rsb-header-toggles button { appearance: none; box-sizing: border-box; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; margin: 0; padding: 0; border: none; border-radius: 6px; background: none; color: var(--dsw-alias-label-secondary); cursor: pointer; }',
       '.rsb-header-toggles button:hover:not(:disabled) { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }',
       '.rsb-header-toggles button:disabled { opacity: 0.4; cursor: default; }',
