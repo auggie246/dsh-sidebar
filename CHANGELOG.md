@@ -4,6 +4,14 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- New blank sessions keep the right-edge Rail until DSH shows the session
+  header. The Sidebar and Panel therefore remain available before the first
+  message, without restoring the Turn Navigator overlap in started sessions.
+
 ## [0.5.2] - 2026-09-11
 
 ### Fixed

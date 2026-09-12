@@ -52,6 +52,7 @@ const context = {
   // document stub lets that effect run so the test can inspect the CSS.
   document: {
     createElement() { return { textContent: '' } },
+    querySelector() { return null },
     head: { appendChild(el) { styleElements.push(el) } },
   },
   navigator: undefined,
@@ -169,13 +170,11 @@ function sidebarToggleOf(bar) {
   return buttons[0]
 }
 
-// ADR 0008: with a session active — even a blank one — the floating Rail is
-// gone and the toggles live in the session-header utilities row.
+// ADR 0008: once a session starts, its visible header carries the toggles.
+// The shell hides that header while a new session remains blank, so the Rail
+// must remain available until the first message starts.
 const headerToggles = registrations.get('conversation.session.header.utilities')
 assert.equal(typeof headerToggles, 'function', 'the header utilities entry must be registered')
-function headerToggleBar(props) {
-  return findClass(renderFunction(headerToggles, props), 'rsb-header-toggles')
-}
 
 const overlay = registrations.get('shell.overlay')
 assert.equal(typeof overlay, 'function', 'the shell.overlay Rail must be registered')
@@ -244,10 +243,16 @@ const newSessionProps = {
   },
 }
 tree = renderFunction(overlay, newSessionProps)
-assert.equal(findClass(tree, 'rsb-rail'), null, 'with a session active the floating Rail must not render')
-const toggles = headerToggleBar(newSessionProps)
-assert.ok(toggles, 'the Header Toggles must render for the blank session')
-sidebarToggleOf(toggles).props.onClick()
+const newSessionRail = findClass(tree, 'rsb-rail')
+assert.ok(newSessionRail, 'the Rail must render while the blank session header is hidden')
+const newSessionButtons = (newSessionRail.props?.children || []).filter((child) => child && child.type === 'button')
+assert.equal(newSessionButtons[1].props.disabled, undefined, 'the Panel toggle must be live in a blank session')
+newSessionButtons[1].props.onClick()
+assert.ok(findComponent(renderFunction(overlay, newSessionProps), 'BottomPanel'), 'the Rail must open the Panel in a blank session')
+const openPanelRail = findClass(renderFunction(overlay, newSessionProps), 'rsb-rail')
+const openPanelButtons = (openPanelRail.props?.children || []).filter((child) => child && child.type === 'button')
+openPanelButtons[1].props.onClick()
+sidebarToggleOf(newSessionRail).props.onClick()
 // Dropping the hook state models the re-render React performs after the
 // store notifies subscribers, and remounts the cards for the new render.
 hookState.clear()

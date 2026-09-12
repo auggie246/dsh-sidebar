@@ -23,15 +23,16 @@ and future Cards belong to this same Sidebar.
 The thin strip pinned to the right edge of the GUI that the Sidebar
 collapses into. The Rail is a stacked bar of region toggles: one for the
 Sidebar, one for the Panel. It is the re-entry point: clicking the Sidebar
-toggle re-expands the Sidebar. The Rail renders only while no session is
-active (the hero page): in a session the toggles move to the Header Toggles,
-so the floating bar never covers the shell's Turn Navigator — the right-edge
+toggle re-expands the Sidebar. The Rail renders on the hero page and while a
+new session remains blank, because DSH hides the session header in both
+states. Once the session starts, the toggles move to the Header Toggles, so
+the floating bar never covers the shell's Turn Navigator — the right-edge
 turn-mark lane of the conversation (ADR 0008).
 
 ## Header Toggles
 
 The two region toggles (Sidebar and Panel) rendered in the shell's
-session-header utilities row while a session is active. They are the same
+session-header utilities row once a session starts. They are the same
 two-button factory the Rail carries, so behavior is identical in both seats.
 The Header Toggles are plain inline content in the header row — nothing
 floats over the conversation or its right-edge Turn Navigator.
