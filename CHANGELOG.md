@@ -6,6 +6,8 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-09-14
+
 ### Added
 
 - The Panel now supports a safe Text Preview presentation. The `+` picker can
