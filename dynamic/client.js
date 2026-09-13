@@ -310,14 +310,15 @@ const XTERM = (function () {
     // above. Per-type behavior lives in the TAB_TYPES registry below.
     const TABS_KEY_BASE = 'dsh.rsidebar.panels.v1.'
     const TAB_TYPE_HTML_FILE = 'html-file'
-      const TAB_TYPE_TERMINAL = 'terminal'
     const TAB_TYPE_MARKDOWN_FILE = 'markdown-file'
+    const TAB_TYPE_TEXT_FILE = 'text-file'
+    const TAB_TYPE_LOCALHOST_URL = 'localhost-url'
+    const TAB_TYPE_TERMINAL = 'terminal'
     // The preview type a file select opens (issue #21): a .md/.markdown
     // file renders as Markdown, everything else as an HTML file preview.
     function previewTypeFor(path) {
       return /\.(md|markdown)$/i.test(String(path || '')) ? TAB_TYPE_MARKDOWN_FILE : TAB_TYPE_HTML_FILE
     }
-    const TAB_TYPE_LOCALHOST_URL = 'localhost-url'
     function tabsStorageKey(sessionId) { return TABS_KEY_BASE + sessionId }
     function normalizeTabUrl(raw) {
       let s = String(raw || '').trim()
@@ -364,8 +365,8 @@ const XTERM = (function () {
       // reuses the same shell instead of spawning a new one. Closing the tab
       // deletes the entry and kills the shell (see dispose below).
       const terminalSessions = new Map()
-    // One registry entry per file-preview type; the two types differ only in
-    // the tab type constant they carry.
+    // One registry entry per File Preview presentation. Each entry differs
+    // only in the tab type constant it carries.
     function filePreviewType(type) {
       return {
         identity(tab) { return String(tab.path || '').trim() },
@@ -402,28 +403,11 @@ const XTERM = (function () {
           ]
         },
       },
-      // File previews (ticket #7): one entry per type, both backed by the
-      // FilePreviewTab component below. Identity is the trimmed path, so
-      // re-opening a path re-focuses its tab; dedupe stays per type, so
-      // the same file can be open once as HTML and once as Markdown.
-      [TAB_TYPE_HTML_FILE]: {
-        identity(tab) { return String(tab.path || '').trim() },
-        restore(entry) {
-          if (typeof entry.path !== 'string' || !entry.path.trim()) return null
-          return { id: typeof entry.id === 'string' && entry.id ? entry.id : newTabId(), type: TAB_TYPE_HTML_FILE, path: entry.path.trim() }
-        },
-        strip(tab) { return { title: tab.path, label: baseName(tab.path) } },
-        render(tab) { return [h(FilePreviewTab, { key: tab.id, tab })] },
-      },
-      [TAB_TYPE_MARKDOWN_FILE]: {
-        identity(tab) { return String(tab.path || '').trim() },
-        restore(entry) {
-          if (typeof entry.path !== 'string' || !entry.path.trim()) return null
-          return { id: typeof entry.id === 'string' && entry.id ? entry.id : newTabId(), type: TAB_TYPE_MARKDOWN_FILE, path: entry.path.trim() }
-        },
-        strip(tab) { return { title: tab.path, label: baseName(tab.path) } },
-        render(tab) { return [h(FilePreviewTab, { key: tab.id, tab })] },
-      },
+      // File previews share one loader. Identity stays path-scoped per
+      // presentation, so one file can be open as HTML, Markdown, and Text.
+      [TAB_TYPE_HTML_FILE]: filePreviewType(TAB_TYPE_HTML_FILE),
+      [TAB_TYPE_MARKDOWN_FILE]: filePreviewType(TAB_TYPE_MARKDOWN_FILE),
+      [TAB_TYPE_TEXT_FILE]: filePreviewType(TAB_TYPE_TEXT_FILE),
       [TAB_TYPE_TERMINAL]: {
         // Terminals never dedupe: every tab owns its own shell, so the
         // tab id is the identity. Reload re-attach (ticket #9): a stored
@@ -1285,7 +1269,7 @@ const XTERM = (function () {
     }
 
     // ---------- file preview tabs (ticket #7) ----------
-    // One component backs both file preview types: it loads the file's
+    // One component backs all File Preview presentations. It loads the file's
     // bytes through the readFile RPC once per mount and keeps them in
     // local state. A mount-time instance seq guards the async load the
     // way GitStatusCard.refresh does, so a slow reply from a superseded
@@ -1319,6 +1303,11 @@ const XTERM = (function () {
 
       if (error) return h('div', { className: 'rsb-error', title: 'Click to dismiss', onClick: () => setError('') }, error)
       if (content === null) return h('div', { className: 'rsb-empty' }, 'Loading…')
+      if (tab.type === TAB_TYPE_TEXT_FILE) {
+        if (content.includes('\0')) return h('div', { className: 'rsb-empty rsb-text-binary' }, 'Binary files are not supported.')
+        if (!content) return h('div', { className: 'rsb-empty' }, 'File is empty.')
+        return h('pre', { className: 'rsb-text-preview' }, content)
+      }
       if (tab.type === TAB_TYPE_MARKDOWN_FILE) {
         // No sandbox permissions at all: the renderer escapes every raw
         // tag, so the document is inert and needs no scripts.
@@ -1926,7 +1915,7 @@ const XTERM = (function () {
             className: 'rsb-tab' + (t.id === tabs.active ? ' rsb-tab-active' : ''),
             role: 'tab',
             'aria-selected': t.id === tabs.active ? 'true' : 'false',
-            title: t.url,
+            title: tabChipOf(t).title,
             onClick: () => focusTab(t.id),
           },
             h('span', { className: 'rsb-tab-label' }, tabChipOf(t).label),
@@ -1958,8 +1947,13 @@ const XTERM = (function () {
           },
             h('span', { className: 'rsb-tab-picker-title' }, 'Markdown file'),
             h('span', { className: 'rsb-tab-picker-sub' }, 'Render a repo Markdown file')),
-          
-        
+          h('button', {
+            className: 'rsb-tab-picker-item',
+            title: 'Preview a repo file as source text',
+            onClick: () => { setPicker(TAB_TYPE_TEXT_FILE); setDraft(''); setFormErr('') },
+          },
+            h('span', { className: 'rsb-tab-picker-title' }, 'Text file'),
+            h('span', { className: 'rsb-tab-picker-sub' }, 'Preview a repo file as source text')),
           h('button', {
             className: 'rsb-tab-picker-item',
             title: 'Interactive shell in the workspace',
@@ -1989,13 +1983,13 @@ const XTERM = (function () {
           h('div', { className: 'rsb-tab-picker-actions' },
             h('button', { type: 'button', className: 'rsb-act', onClick: () => setPicker('types') }, 'Back'),
             h('button', { type: 'submit', className: 'rsb-tab-picker-open', disabled: !/\S/.test(draft) }, 'Open'))) : null,
-        // File previews (ticket #7): one shared path-entry form for both
-        // file types. The submit is the submitDraftPath flow: a blank
-        // draft shows the form error, a same-type tab with the same
-        // trimmed path re-focuses (no RPC call), and anything else
+        // File previews share one path-entry form for all presentations.
+        // The submit flow shows an error for a blank draft. A same-type
+        // tab with the same trimmed path re-focuses without an RPC call.
+        // Anything else
         // appends a { id, type, path } tab and focuses it. Both paths
         // persist; success closes the picker.
-        picker === TAB_TYPE_HTML_FILE || picker === TAB_TYPE_MARKDOWN_FILE ? h('form', { className: 'rsb-tab-picker-form', onSubmit: (e) => {
+        picker === TAB_TYPE_HTML_FILE || picker === TAB_TYPE_MARKDOWN_FILE || picker === TAB_TYPE_TEXT_FILE ? h('form', { className: 'rsb-tab-picker-form', onSubmit: (e) => {
           if (e && e.preventDefault) e.preventDefault()
           const path = draft.trim()
           if (!path) {
@@ -2013,7 +2007,7 @@ const XTERM = (function () {
           setDraft('')
           setFormErr('')
         } },
-          h('div', { className: 'rsb-tab-picker-head' }, picker === TAB_TYPE_MARKDOWN_FILE ? 'MARKDOWN FILE' : 'HTML FILE'),
+          h('div', { className: 'rsb-tab-picker-head' }, picker === TAB_TYPE_MARKDOWN_FILE ? 'MARKDOWN FILE' : picker === TAB_TYPE_TEXT_FILE ? 'TEXT FILE' : 'HTML FILE'),
           h('input', {
             className: 'rsb-tab-picker-input',
             type: 'text',
@@ -2349,6 +2343,7 @@ const XTERM = (function () {
       '.rsb-tabcontent { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base); }',
       '.rsb-tabframe-hint { flex-shrink: 0; padding: 3px 8px; font-size: 10px; line-height: 1.4; color: var(--dsw-alias-label-secondary); background: var(--dsw-specific-sidebar-fill); border-bottom: 1px solid var(--dsw-alias-border-l1); }',
       '.rsb-tabframe { flex: 1; min-height: 0; width: 100%; border: none; background: var(--dsw-alias-bg-base); }',
+      '.rsb-text-preview { flex: 1; min-height: 0; box-sizing: border-box; margin: 0; padding: 10px 12px; overflow: auto; white-space: pre; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-base); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; }',
       '.rsb-panel-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--dsw-alias-label-secondary); text-align: center; padding: 12px; }',
       '.rsb-panel-empty-title { font-size: 12px; }',
       '.rsb-panel-empty-sub { font-size: 10px; }',

@@ -67,6 +67,20 @@ preview, rendered preview). The user creates tabs with a "+" picker inside
 the Panel and closes each tab with its own control. Closing the last tab
 leaves the Panel open but empty.
 
+## File Preview
+
+A read-only Panel Tab that displays one file from the current workspace. A File
+Preview has one explicit presentation type: HTML Preview, Markdown Preview, or
+Text Preview. The Explorer chooses that type from the file extension. The Panel
+picker lets the user choose it directly.
+
+## Text Preview
+
+The safe source-text presentation for a File Preview. It preserves the file's
+line structure and whitespace without interpreting the content as HTML or
+Markdown. A file that is neither HTML nor Markdown uses this presentation by
+default.
+
 ## Sidebar Settings
 
 The affordance inside the Sidebar where the user toggles each Card visible or

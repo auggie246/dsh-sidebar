@@ -49,6 +49,10 @@ Working Repository, Explorer).
   directories only. File selection opens a preview Panel Tab through a
   module-scope pending-open store that `BottomPanel` drains — the first
   Card→Panel seam (ADR 0007).
+- **Planned Text Preview fallback.** Non-HTML and non-Markdown files will open
+  as safe source text instead of HTML. The approved behavior, picker overrides,
+  binary handling, and one-time Panel-state migration are specified in
+  [plain-text-file-preview-design.md](plain-text-file-preview-design.md).
 - **Two distribution forms share the codebase** (see README): a composition
   package (`lib/`, permanent install) and a dynamic bundle (`dynamic/`,
   session-only install). Keep them behaviorally in sync.

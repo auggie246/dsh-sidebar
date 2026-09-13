@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// File preview Panel Tab check (ticket #7): the + picker offers HTML file
-// and Markdown file; submitting a path creates one tab that loads its bytes
+// File preview Panel Tab check (tickets #7 and #22): the + picker offers
+// HTML, Markdown, and Text files; submitting a path creates one tab that loads its bytes
 // through the readFile RPC; the HTML preview renders inside a
 // script-allowed iframe without same-origin; the Markdown preview renders
 // as styled HTML with no scripts; re-opening the same path re-focuses the
-// existing tab; both types persist per session; unknown stored types still
+// existing tab; all three presentations persist per session; unknown stored types still
 // drop.
 //
 // Seam (agreed): the rendered tree of the shell.overlay registration and
@@ -17,12 +17,23 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import vm from 'node:vm'
 
-const source = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
+const clientFile = process.argv[2] || 'lib/client.js'
+const dynamicClient = clientFile === 'dynamic/client.js'
+const source = await readFile(new URL('../' + clientFile, import.meta.url), 'utf8')
+if (dynamicClient) {
+  const bundle = JSON.parse(await readFile(new URL('../dynamic/dsh-sidebar.dynamic.json', import.meta.url), 'utf8'))
+  const hostSource = await readFile(new URL('../dynamic/host.js', import.meta.url), 'utf8')
+  assert.equal(bundle.client, source, 'the generated dynamic bundle must contain the current client source')
+  assert.equal(bundle.host, hostSource, 'the generated dynamic bundle must contain the current host source')
+}
 const TABS_KEY_BASE = 'dsh.rsidebar.panels.v1.'
 
 const DEFAULT_FILES = {
   'demo.html': '<h1>Raw demo</h1><script>alert(1)</script>',
   'docs/readme.md': '# Hi\n\n**bold** and `code`.\n\n<script>alert(1)</script>\n',
+  'notes.txt': 'first line\n\tindented  words\n<script>alert(1)</script>',
+  'empty.txt': '',
+  'binary.txt': 'before\0after',
 }
 
 // One macrotask: the fake remote resolves on a microtask, so a timer tick
@@ -74,6 +85,7 @@ function boot(env = {}) {
     setItem(k, v) { storage.set(k, String(v)) },
   }
   const styleElements = []
+  const dynamicStyles = []
 
   // Fake rsidebarGit remote: records every readFile call and serves the
   // per-path content table. Unknown paths reject with an error message.
@@ -125,6 +137,18 @@ function boot(env = {}) {
     ResizeObserver,
     navigator: undefined,
     localStorage,
+    React,
+    styles: { insert(rules) { dynamicStyles.push(...(Array.isArray(rules) ? rules : [rules])) } },
+    host: {
+      call(method, payload) {
+        const path = payload?.path || ''
+        remoteCalls.push({ method, args: [payload?.cwd || '', path] })
+        if (method === 'readFile' && Object.prototype.hasOwnProperty.call(files, path)) {
+          return Promise.resolve({ ok: true, content: files[path] })
+        }
+        return Promise.resolve({ ok: false, error: 'no such file: ' + path })
+      },
+    },
     console,
     Promise,
     Set,
@@ -133,12 +157,17 @@ function boot(env = {}) {
     JSON,
     Error,
   }
-  vm.runInNewContext(source, context, { filename: 'lib/client.js' })
+  if (dynamicClient) {
+    plugin = vm.runInNewContext('(function (React, host) {\n' + source + '\n})(React, host)', context, { filename: clientFile })
+  } else {
+    vm.runInNewContext(source, context, { filename: clientFile })
+  }
 
   const layoutCalls = []
   const registrations = new Map()
   const ctx = {
     get(name) {
+      if (name === 'slots') return this.slots
       if (name === 'layout') {
         return {
           openDetails() { layoutCalls.push('open') },
@@ -253,7 +282,7 @@ function boot(env = {}) {
       return tree
     },
     renderToggles(props) { return renderFunction(headerToggles, props) },
-    stylesheet: styleElements.map((el) => el.textContent).join('\n'),
+    stylesheet: styleElements.map((el) => el.textContent).concat(dynamicStyles).join('\n'),
     storage,
     layoutCalls,
     remoteCalls,
@@ -322,7 +351,7 @@ function openFileTab(env, itemLabel, path) {
   const next = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
   assert.ok(env.findClass(next, 'rsb-tab-picker'), 'clicking + must open the type picker')
   const items = env.findAll(next, 'rsb-tab-picker-item')
-  assert.equal(items.length, 4, 'the picker must list Localhost URL, HTML file, Markdown file and Terminal')
+  assert.equal(items.length, 5, 'the picker must list Localhost URL, all three file presentations, and Terminal')
   const labels = items.map((item) => {
     const strings = []
     env.collectStrings(item, strings)
@@ -331,7 +360,8 @@ function openFileTab(env, itemLabel, path) {
   assert.ok(labels[0].includes('Localhost URL'), 'Localhost URL stays the first picker item')
   assert.ok(labels[1].includes('HTML file') && labels[1].includes('Preview a repo file in an iframe'), 'the HTML file item must carry its title and sub')
   assert.ok(labels[2].includes('Markdown file') && labels[2].includes('Render a repo Markdown file'), 'the Markdown file item must carry its title and sub')
-  assert.ok(labels[3].includes('Terminal'), 'the Terminal item from ticket #8 stays last')
+  assert.ok(labels[3].includes('Text file') && labels[3].includes('Preview a repo file as source text'), 'the Text file item must carry its title and sub')
+  assert.ok(labels[4].includes('Terminal'), 'the Terminal item from ticket #8 stays last')
 }
 
 // 2. The HTML file flow: the form matches the URL form structure, submitting
@@ -462,7 +492,64 @@ function openFileTab(env, itemLabel, path) {
   assert.ok(chipStrings.join(' ').includes('readme.md'), 'the chip label must show the base name')
 }
 
-// 5. Re-opening the same path re-focuses the existing tab: no append, no
+// 5. Text Preview renders source as a text child, preserves whitespace,
+//    scrolls without wrapping, and has no iframe, hint, or source decoration.
+//    Empty and NUL-containing content use their required states. Explicit
+//    HTML and Markdown choices remain presentation overrides.
+{
+  const env = boot()
+  let panel = openPanel(env)
+  panel = openFileTab(env, 'Text file', 'notes.txt')
+  await tick()
+  panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
+  const preview = env.findClass(panel, 'rsb-text-preview')
+  assert.ok(preview, 'a loaded Text Preview must render a source-text surface')
+  assert.equal(preview.type, 'pre', 'the source-text surface must preserve whitespace natively')
+  const sourceText = []
+  env.collectStrings(preview, sourceText)
+  assert.equal(sourceText.join(''), DEFAULT_FILES['notes.txt'], 'markup, spaces, tabs, and line breaks must remain inert source text')
+  assert.equal(env.findClass(panel, 'rsb-tabframe'), null, 'Text Preview must not render an iframe')
+  assert.equal(env.findClass(panel, 'rsb-tabframe-hint'), null, 'Text Preview must not render a hint bar')
+  assert.match(env.stylesheet, /\.rsb-text-preview \{[^}]*overflow: auto/, 'Text Preview must scroll vertically and horizontally')
+  assert.match(env.stylesheet, /\.rsb-text-preview \{[^}]*white-space: pre;/, 'Text Preview must preserve whitespace without wrapping')
+  assert.match(env.stylesheet, /\.rsb-text-preview \{[^}]*font-family: ui-monospace/, 'Text Preview must use a monospace font')
+  assert.match(env.stylesheet, /\.rsb-text-preview \{[^}]*color: var\(--dsw-alias-label-primary\)/, 'Text Preview must use application theme text color')
+  assert.match(env.stylesheet, /\.rsb-text-preview \{[^}]*background: var\(--dsw-alias-bg-base\)/, 'Text Preview must use application theme background color')
+  panel = openFileTab(env, 'Text file', 'notes.txt')
+  assert.equal(env.findAll(panel, 'rsb-tab').length, 1, 'reopening the same path as Text must focus its existing tab')
+  assert.equal(env.remoteCalls.length, 1, 'reopening the same path as Text must reuse its loaded content')
+
+  const emptyEnv = boot()
+  let emptyPanel = openPanel(emptyEnv)
+  emptyPanel = openFileTab(emptyEnv, 'Text file', 'empty.txt')
+  await tick()
+  emptyPanel = emptyEnv.findClass(emptyEnv.render(startedProps), 'rsb-bottom-panel')
+  const emptyText = []
+  emptyEnv.collectStrings(emptyEnv.findClass(emptyPanel, 'rsb-empty'), emptyText)
+  assert.ok(emptyText.join(' ').includes('File is empty.'), 'an empty Text Preview must show File is empty.')
+
+  const binaryEnv = boot()
+  let binaryPanel = openPanel(binaryEnv)
+  binaryPanel = openFileTab(binaryEnv, 'Text file', 'binary.txt')
+  await tick()
+  binaryPanel = binaryEnv.findClass(binaryEnv.render(startedProps), 'rsb-bottom-panel')
+  const binaryText = []
+  binaryEnv.collectStrings(binaryEnv.findClass(binaryPanel, 'rsb-text-binary'), binaryText)
+  assert.ok(binaryText.join(' ').includes('Binary files are not supported.'), 'a NUL byte must show the unsupported-binary state')
+  assert.equal(binaryEnv.findClass(binaryPanel, 'rsb-text-preview'), null, 'binary content must not render decoded source text')
+
+  for (const presentation of ['HTML file', 'Markdown file']) {
+    const overrideEnv = boot()
+    let overridePanel = openPanel(overrideEnv)
+    overridePanel = openFileTab(overrideEnv, presentation, 'binary.txt')
+    await tick()
+    overridePanel = overrideEnv.findClass(overrideEnv.render(startedProps), 'rsb-bottom-panel')
+    assert.ok(overrideEnv.findClass(overridePanel, 'rsb-tabframe'), presentation + ' must remain an explicit presentation override')
+    assert.equal(overrideEnv.findClass(overridePanel, 'rsb-text-binary'), null, presentation + ' must bypass Text Preview binary handling')
+  }
+}
+
+// 6. Re-opening the same path re-focuses the existing tab: no append, no
 //    second readFile call, and the loaded content stays put.
 {
   const env = boot()
@@ -512,31 +599,34 @@ function openFileTab(env, itemLabel, path) {
   let panel = openPanel(env)
   panel = openFileTab(env, 'HTML file', 'demo.html')
   panel = openFileTab(env, 'Markdown file', 'docs/readme.md')
+  panel = openFileTab(env, 'Text file', 'notes.txt')
   const key = TABS_KEY_BASE + 'session-a'
   assert.ok(env.storage.has(key), 'the tab state must persist under dsh.rsidebar.panels.v1.<sessionId>')
   const saved = JSON.parse(env.storage.get(key))
-  assert.equal(saved.tabs.length, 2, 'both tabs must be stored')
+  assert.equal(saved.tabs.length, 3, 'all three file presentation tabs must be stored')
   assert.equal(saved.tabs[0].type, 'html-file', 'the stored html tab must carry its type')
   assert.equal(saved.tabs[0].path, 'demo.html', 'the stored html tab must carry its path')
   assert.equal(saved.tabs[1].type, 'markdown-file', 'the stored markdown tab must carry its type')
   assert.equal(saved.tabs[1].path, 'docs/readme.md', 'the stored markdown tab must carry its path')
-  assert.equal(saved.active, saved.tabs[1].id, 'the active tab must be stored')
+  assert.equal(saved.tabs[2].type, 'text-file', 'the stored text tab must carry its type')
+  assert.equal(saved.tabs[2].path, 'notes.txt', 'the stored text tab must carry its path')
+  assert.equal(saved.active, saved.tabs[2].id, 'the active tab must be stored')
 
   const env2 = boot({ storage: env.storage })
   const panel2 = openPanel(env2)
-  assert.equal(env2.findAll(panel2, 'rsb-tab').length, 2, 'both file preview types must survive a reload')
+  assert.equal(env2.findAll(panel2, 'rsb-tab').length, 3, 'all three file presentation types must survive a reload')
   await tick()
   const panel3 = env2.findClass(env2.render(startedProps), 'rsb-bottom-panel')
-  const frame = env2.findClass(panel3, 'rsb-tabframe')
-  assert.ok(String(frame.props.srcdoc).includes('<h1>Hi</h1>'), 'the restored active tab must render its markdown')
+  const text = env2.findClass(panel3, 'rsb-text-preview')
+  assert.ok(text, 'the restored active tab must render its Text Preview')
   assert.deepEqual(
     env2.remoteCalls.map((c) => c.args),
-    [['', 'docs/readme.md']],
+    [['', 'notes.txt']],
     'the restored active tab must load its own file',
   )
 }
 
-// 8. Unknown stored types still drop: a terminal entry and an empty-path
+// 9. Unknown stored types still drop: a terminal entry and an empty-path
 //    markdown entry disappear, while the html-file entry survives.
 {
   const foreign = new Map()

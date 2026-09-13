@@ -6,6 +6,15 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The Panel now supports a safe Text Preview presentation. The `+` picker can
+  open any workspace path as inert source text, regardless of its extension.
+  Text Preview preserves whitespace, uses theme colors and monospace text,
+  scrolls without wrapping,
+  reports empty files, and rejects NUL-containing content as unsupported binary.
+  File presentation remains part of tab identity and persists per session.
+
 ### Fixed
 
 - New blank sessions show header-style Sidebar and Panel toggles at the

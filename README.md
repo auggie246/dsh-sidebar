@@ -21,6 +21,7 @@ A Git sidebar for DeepSeek Harness Web.
 - [Usage](#usage)
   - [Source Control](#source-control)
   - [Commit Graph](#commit-graph)
+  - [File previews](#file-previews)
   - [Explorer](#explorer)
   - [Customize the sidebar](#customize-the-sidebar)
   - [Configuration and privacy](#configuration-and-privacy)
@@ -132,6 +133,12 @@ The card refreshes while it is visible, so branch and working-tree state stay cu
 ### Commit Graph
 
 The **Commit Graph** card displays commits from every local and remote ref. Each row shows the subject, the author's colored initials, and the relative time; hover a row for the full author, date, and hash. Scroll to load older commits. Right-click a commit to copy its hash or message.
+
+### File previews
+
+Use the Panel **+** picker to open a workspace path as **HTML file**, **Markdown file**, or **Text file**. Each choice is explicit, so the same path can stay open under different presentations.
+
+Text Preview shows inert source text with theme colors and a monospace font. It preserves whitespace, keeps long lines unwrapped, and scrolls in both directions. Empty files show `File is empty.`. Files containing a NUL byte show `Binary files are not supported.` instead. The existing `2 MB` limit and read errors apply to every File Preview.
 
 ### Explorer
 
