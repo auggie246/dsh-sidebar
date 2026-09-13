@@ -53,8 +53,9 @@ Working Repository, Explorer).
   remains an explicit override. Explorer selection routes `.html` and `.htm`
   to HTML Preview, `.md` and `.markdown` to Markdown Preview, and every other
   path to Text Preview. Matching ignores letter case. Path and presentation
-  together form tab identity. The remaining one-time Panel-state migration is
-  specified in [plain-text-file-preview-design.md](plain-text-file-preview-design.md).
+  together form tab identity. Legacy Panel state migrates once by these rules,
+  then `schema: 1` makes saved presentation types authoritative. See
+  [plain-text-file-preview-design.md](plain-text-file-preview-design.md).
 - **Two distribution forms share the codebase** (see README): a composition
   package (`lib/`, permanent install) and a dynamic bundle (`dynamic/`,
   session-only install). Keep them behaviorally in sync.

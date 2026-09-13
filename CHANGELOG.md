@@ -18,6 +18,9 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
   `.md` and `.markdown` to Markdown Preview, and every other path to Text
   Preview. Matching ignores letter case. Repeated selection focuses the tab
   matching both path and presentation, while picker overrides remain separate.
+- Legacy saved Panel state now migrates once by the same extension rules and
+  immediately receives `schema: 1`. Valid non-file tabs and the active tab
+  remain unchanged. Marked state preserves later explicit picker choices.
 
 ### Fixed
 

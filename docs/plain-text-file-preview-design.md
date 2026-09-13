@@ -72,7 +72,7 @@ The Explorer remains view-only.
 
 Existing Panel state uses the `dsh.rsidebar.panels.v1.<sessionId>` key without a schema marker.
 It classifies most files as `html-file`.
-The new implementation performs one legacy migration for each saved Panel state.
+The implementation performs one legacy migration for each saved Panel state.
 
 During that migration:
 
@@ -82,7 +82,7 @@ During that migration:
 - Non-file Panel Tabs keep their existing type and state.
 - The active tab remains active when its migrated tab survives.
 
-The upgraded state receives a schema marker and persists immediately.
+The upgraded state receives `schema: 1` and persists immediately.
 After migration, saved presentation types are authoritative.
 Later explicit picker overrides must survive Panel remounts and page reloads.
 

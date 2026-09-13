@@ -72,7 +72,9 @@ leaves the Panel open but empty.
 A read-only Panel Tab that displays one file from the current workspace. A File
 Preview has one explicit presentation type: HTML Preview, Markdown Preview, or
 Text Preview. The Explorer chooses that type from the file extension. The Panel
-picker lets the user choose it directly.
+picker lets the user choose it directly. Legacy saved Panel state without
+`schema: 1` migrates once by the Explorer rules. Marked state keeps its saved
+presentation authoritative.
 
 ## Text Preview
 

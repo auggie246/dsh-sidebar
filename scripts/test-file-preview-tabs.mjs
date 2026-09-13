@@ -603,6 +603,7 @@ function openFileTab(env, itemLabel, path) {
   const key = TABS_KEY_BASE + 'session-a'
   assert.ok(env.storage.has(key), 'the tab state must persist under dsh.rsidebar.panels.v1.<sessionId>')
   const saved = JSON.parse(env.storage.get(key))
+  assert.equal(saved.schema, 1, 'new Panel state must carry the current schema marker')
   assert.equal(saved.tabs.length, 3, 'all three file presentation tabs must be stored')
   assert.equal(saved.tabs[0].type, 'html-file', 'the stored html tab must carry its type')
   assert.equal(saved.tabs[0].path, 'demo.html', 'the stored html tab must carry its path')
@@ -648,7 +649,79 @@ function openFileTab(env, itemLabel, path) {
   assert.ok(env.findClass(panel2, 'rsb-tabframe'), 'the surviving html-file tab must render its content')
 }
 
-// 9. A failed load renders the error state and no iframe.
+// 9. Legacy saved Panel state migrates once by path extension. Valid non-file
+//    tabs and the active tab survive, invalid entries still drop, and the
+//    upgraded state persists immediately with its schema marker.
+{
+  const legacy = new Map()
+  legacy.set(TABS_KEY_BASE + 'session-a', JSON.stringify({
+    tabs: [
+      { id: 'html', type: 'markdown-file', path: 'page.HTM' },
+      { id: 'markdown', type: 'html-file', path: 'docs/readme.md' },
+      { id: 'text', type: 'html-file', path: '.gitignore' },
+      { id: 'url', type: 'localhost-url', url: 'http://localhost:5173' },
+      { id: 'unknown', type: 'future-tab', path: 'notes.txt' },
+      { id: 'invalid', type: 'html-file', path: '' },
+    ],
+    active: 'markdown',
+  }))
+  const env = boot({ storage: legacy })
+  const panel = openPanel(env)
+  assert.equal(env.findAll(panel, 'rsb-tab').length, 4, 'legacy migration must retain every valid known tab')
+  await tick()
+  const loaded = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
+  const activeFrame = env.findClass(loaded, 'rsb-tabframe')
+  assert.equal(activeFrame?.props.title, 'docs/readme.md', 'the migrated active Markdown Preview must remain active')
+  assert.equal(activeFrame?.props.sandbox, '', 'the migrated active tab must use Markdown Preview')
+
+  const upgraded = JSON.parse(env.storage.get(TABS_KEY_BASE + 'session-a'))
+  assert.equal(upgraded.schema, 1, 'legacy state must persist its schema marker immediately')
+  assert.deepEqual(
+    upgraded.tabs.map((tab) => [tab.id, tab.type]),
+    [
+      ['html', 'html-file'],
+      ['markdown', 'markdown-file'],
+      ['text', 'text-file'],
+      ['url', 'localhost-url'],
+    ],
+    'legacy File Previews must migrate by extension while valid non-file tabs keep their type',
+  )
+  assert.equal(upgraded.active, 'markdown', 'a surviving migrated active tab must remain active')
+}
+
+// 10. Marked state is authoritative. Nonstandard explicit picker overrides
+//     survive both a Panel remount and a page reload without reclassification.
+{
+  const key = TABS_KEY_BASE + 'session-a'
+  const storage = new Map([[key, JSON.stringify({ schema: 1, tabs: [], active: null })]])
+  const env = boot({ storage })
+  let panel = openPanel(env)
+  panel = openFileTab(env, 'HTML file', 'notes.txt')
+  panel = openFileTab(env, 'Text file', 'demo.html')
+  assert.deepEqual(
+    JSON.parse(env.storage.get(key)).tabs.map((tab) => tab.type),
+    ['html-file', 'text-file'],
+    'explicit picker overrides must persist with their selected presentations',
+  )
+
+  let toggles = env.renderToggles(startedProps)
+  railButtons(env.findClass(toggles, 'rsb-header-toggles'))[1].props.onClick()
+  panel = openPanel(env)
+  assert.equal(activeTabs(env, panel)[0]?.props.title, 'demo.html', 'the explicit active Text Preview must survive a Panel remount')
+
+  const env2 = boot({ storage })
+  panel = openPanel(env2)
+  await tick()
+  panel = env2.findClass(env2.render(startedProps), 'rsb-bottom-panel')
+  assert.ok(env2.findClass(panel, 'rsb-text-preview'), 'the explicit Text Preview must survive a page reload')
+  assert.deepEqual(
+    JSON.parse(env2.storage.get(key)).tabs.map((tab) => tab.type),
+    ['html-file', 'text-file'],
+    'a page reload must not reclassify marked explicit overrides',
+  )
+}
+
+// 11. A failed load renders the error state and no iframe.
 {
   const env = boot({ files: {} })
   let panel = openPanel(env)
