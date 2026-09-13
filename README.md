@@ -145,7 +145,7 @@ Text Preview shows inert source text with theme colors and a monospace font. It 
 The **Explorer** card is a view-only file explorer over the current session's workspace. Unlike the Git cards it is not git-bound: it renders in any workspace, git repository or not, and it hides nothing — dotfiles, `.git`, and gitignored entries all show.
 
 - Select a folder to expand or collapse it. Each expansion lists that one folder, so large folders such as `node_modules` cost nothing until you open them, and a folder with more than 1000 entries shows a "+N more" row.
-- Select a file to open a read-only preview Panel Tab. One tab opens per file, selecting the file again focuses its tab, and a `.md` or `.markdown` file opens as a Markdown preview. Selecting a file also opens the Panel if it is closed.
+- Select a file to open a read-only preview Panel Tab. `.html` and `.htm` use HTML Preview. `.md` and `.markdown` use Markdown Preview. Matching ignores letter case. Every other path uses Text Preview, including dotfiles and extensionless files. Selecting the file again focuses the matching path-and-presentation tab. Picker overrides for the same path remain separate tabs. Selecting a file also opens the Panel if it is closed.
 - The card refreshes while it is visible by re-listing only the workspace root and the folders you expanded.
 - View-only means exactly that: the card renders the tree and opens previews. Creating, renaming, moving, and deleting files is out of scope.
 

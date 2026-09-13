@@ -49,10 +49,12 @@ Working Repository, Explorer).
   directories only. File selection opens a preview Panel Tab through a
   module-scope pending-open store that `BottomPanel` drains — the first
   Card→Panel seam (ADR 0007).
-- **Planned Text Preview fallback.** Non-HTML and non-Markdown files will open
-  as safe source text instead of HTML. The approved behavior, picker overrides,
-  binary handling, and one-time Panel-state migration are specified in
-  [plain-text-file-preview-design.md](plain-text-file-preview-design.md).
+- **File Preview presentation follows the opening action.** The Panel picker
+  remains an explicit override. Explorer selection routes `.html` and `.htm`
+  to HTML Preview, `.md` and `.markdown` to Markdown Preview, and every other
+  path to Text Preview. Matching ignores letter case. Path and presentation
+  together form tab identity. The remaining one-time Panel-state migration is
+  specified in [plain-text-file-preview-design.md](plain-text-file-preview-design.md).
 - **Two distribution forms share the codebase** (see README): a composition
   package (`lib/`, permanent install) and a dynamic bundle (`dynamic/`,
   session-only install). Keep them behaviorally in sync.

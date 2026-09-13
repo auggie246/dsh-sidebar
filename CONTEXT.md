@@ -111,8 +111,9 @@ repository or not. It lists directories lazily, one directory per expansion,
 so never-expanded directories cost nothing; while the Card is visible it
 re-scans only the directories the user expanded. It hides nothing: dotfiles,
 `.git`, and gitignored entries all appear. Selecting a file opens a read-only
-preview Panel Tab — one tab per file, a repeat select focuses the open tab —
-through the pending-open store of ADR 0007. View-only means exactly that: the
+preview Panel Tab. Path and presentation form tab identity, so a repeat select
+focuses the extension-selected tab while picker overrides stay separate. Opens
+use the pending-open store of ADR 0007. View-only means exactly that: the
 Card renders the tree and opens previews, and every mutating action is
 explicitly out of scope.
 

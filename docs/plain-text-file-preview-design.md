@@ -1,14 +1,14 @@
 # Plain-text file preview design
 
-Status: approved design, partially implemented by issue #22.
+Status: picker-based Text Preview and Explorer routing implemented by issues #22 and #23.
 
 Delivery is split across three tickets. Issue #22 adds picker-based Text Preview.
 Issue #23 adds Explorer routing. Issue #24 adds legacy Panel-state migration.
 
 ## Problem
 
-The Explorer currently opens every non-Markdown file as an HTML Preview.
-Files such as `.gitignore` therefore render as HTML instead of source text.
+Before issue #23, Explorer opened every non-Markdown file as an HTML Preview.
+Files such as `.gitignore` therefore rendered as HTML instead of source text.
 The browser gives that document a white background and collapses its line breaks.
 
 ## Vocabulary

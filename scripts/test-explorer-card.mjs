@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Explorer Card check (issue #21): the Card Manifest gains a view-only
+// Explorer Card check (issues #21 and #23): the Card Manifest gains a view-only
 // Explorer card (id 'explorer', last, visible by default) that lists the
 // workspace root through the listDir RPC, expands directories lazily,
 // sorts folders first, re-scans only expanded directories while visible,
 // caps a listing with a "+N more" row, and opens a read-only preview Panel
 // Tab on file select through the pending-open store (ADR 0007) — one tab
-// per file, repeat select focuses, and the store's type follows the file
-// (.md renders as Markdown, everything else as an HTML file preview).
+// per path and presentation, repeat select focuses, and case-insensitive
+// extensions route HTML, Markdown, and every other path to Text Preview.
 //
 // Seam (agreed): the rendered tree of the shell.overlay registration and
 // the injected localStorage, exactly like test-file-preview-tabs.mjs. The
@@ -19,7 +19,15 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import vm from 'node:vm'
 
-const source = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
+const clientFile = process.argv[2] || 'lib/client.js'
+const dynamicClient = clientFile === 'dynamic/client.js'
+const source = await readFile(new URL('../' + clientFile, import.meta.url), 'utf8')
+if (dynamicClient) {
+  const bundle = JSON.parse(await readFile(new URL('../dynamic/dsh-sidebar.dynamic.json', import.meta.url), 'utf8'))
+  const hostSource = await readFile(new URL('../dynamic/host.js', import.meta.url), 'utf8')
+  assert.equal(bundle.client, source, 'the generated dynamic bundle must contain the current client source')
+  assert.equal(bundle.host, hostSource, 'the generated dynamic bundle must contain the current host source')
+}
 const TABS_KEY_BASE = 'dsh.rsidebar.panels.v1.'
 
 const DEFAULT_FILES = {
@@ -84,6 +92,7 @@ function boot(env = {}) {
     setItem(k, v) { storage.set(k, String(v)) },
   }
   const styleElements = []
+  const dynamicStyles = []
 
   // Fake rsidebarGit remote: records every call, serves readFile from a
   // per-path content table and listDir from a per-path directory table.
@@ -144,6 +153,21 @@ function boot(env = {}) {
     ResizeObserver,
     navigator: undefined,
     localStorage,
+    React,
+    styles: { insert(rules) { dynamicStyles.push(...(Array.isArray(rules) ? rules : [rules])) } },
+    host: {
+      call(method, payload) {
+        const path = payload?.path || ''
+        remoteCalls.push({ method, args: [payload?.cwd || '', path] })
+        if (method === 'readFile' && Object.prototype.hasOwnProperty.call(files, path)) {
+          return Promise.resolve({ ok: true, content: files[path] })
+        }
+        if (method === 'listDir' && Object.prototype.hasOwnProperty.call(dirtable, path)) {
+          return Promise.resolve(Object.assign({ ok: true }, dirtable[path]))
+        }
+        return Promise.resolve({ ok: false, error: method === 'listDir' ? 'no such directory: ' + path : 'no such file: ' + path })
+      },
+    },
     console,
     Promise,
     Set,
@@ -152,13 +176,18 @@ function boot(env = {}) {
     JSON,
     Error,
   }
-  vm.runInNewContext(source, context, { filename: 'lib/client.js' })
+  if (dynamicClient) {
+    plugin = vm.runInNewContext('(function (React, host) {\n' + source + '\n})(React, host)', context, { filename: clientFile })
+  } else {
+    vm.runInNewContext(source, context, { filename: clientFile })
+  }
 
   const layoutCalls = []
   const intervals = []
   const registrations = new Map()
   const ctx = {
     get(name) {
+      if (name === 'slots') return this.slots
       if (name === 'layout') {
         return {
           openDetails() { layoutCalls.push('open') },
@@ -257,6 +286,17 @@ function boot(env = {}) {
     return null
   }
 
+  function buttonWithText(node, text) {
+    let found = null
+    visit(node, (candidate) => {
+      if (found || candidate.type !== 'button') return
+      const strings = []
+      collectStrings(candidate, strings)
+      if (strings.join(' ').includes(text)) found = candidate
+    })
+    return found
+  }
+
   const overlay = registrations.get('shell.overlay')
   // ADR 0008: with a session active the region toggles live in the
   // session-header utilities row.
@@ -271,7 +311,7 @@ function boot(env = {}) {
       return tree
     },
     renderToggles(props) { return renderFunction(headerToggles, props) },
-    stylesheet: styleElements.map((el) => el.textContent).join('\n'),
+    stylesheet: styleElements.map((el) => el.textContent).concat(dynamicStyles).join('\n'),
     storage,
     layoutCalls,
     intervals,
@@ -281,6 +321,7 @@ function boot(env = {}) {
     visit,
     collectStrings,
     rowWithText,
+    buttonWithText,
   }
 }
 
@@ -505,7 +546,73 @@ console.log('explorer over-cap row check passed')
 }
 console.log('explorer file-select preview check passed')
 
-// 6. With the Panel already open, a file select still lands: the live
+// 6. Explorer chooses a File Preview presentation from the complete path.
+//    Matching ignores case; HTML and Markdown use their rendered previews,
+//    while every other path uses Text Preview. An explicit picker override
+//    for the same path remains a separate tab, and repeat selection focuses
+//    the matching path-and-presentation tab.
+{
+  const cases = [
+    ['index.html', 'html-file'],
+    ['page.HTM', 'html-file'],
+    ['README.md', 'markdown-file'],
+    ['guide.MARKDOWN', 'markdown-file'],
+    ['.gitignore', 'text-file'],
+    ['LICENSE', 'text-file'],
+    ['data.json', 'text-file'],
+    ['app.js', 'text-file'],
+    ['icon.svg', 'text-file'],
+    ['feed.xml', 'text-file'],
+    ['archive.unknown', 'text-file'],
+  ]
+  for (const [path, type] of cases) {
+    const env = boot({
+      files: { [path]: 'fixture' },
+      dirtable: { '': { entries: [{ name: path, kind: 'file' }], hasMore: false, total: 1 } },
+    })
+    openSidebar(env)
+    await tick()
+    env.rowWithText(env.findClass(env.render(blankProps), 'rsb-panel'), 'rsb-tree-row', path).props.onClick()
+    env.render(blankProps)
+    const saved = JSON.parse(env.storage.get(TABS_KEY_BASE + 'session-a'))
+    assert.equal(saved.tabs[0].type, type, path + ' must open with the extension-selected presentation')
+  }
+
+  const path = 'notes.txt'
+  const env = boot({
+    files: { [path]: 'notes' },
+    dirtable: { '': { entries: [{ name: path, kind: 'file' }], hasMore: false, total: 1 } },
+  })
+  let tree = openSidebar(env)
+  await tick()
+  tree = openPanel(env, tree)
+  let bottomPanel = env.findClass(tree, 'rsb-bottom-panel')
+  env.findClass(bottomPanel, 'rsb-tabstrip-add').props.onClick()
+  bottomPanel = env.findClass(env.render(blankProps), 'rsb-bottom-panel')
+  env.buttonWithText(bottomPanel, 'HTML file').props.onClick()
+  bottomPanel = env.findClass(env.render(blankProps), 'rsb-bottom-panel')
+  env.findClass(bottomPanel, 'rsb-tab-picker-input').props.onChange({ target: { value: path } })
+  bottomPanel = env.findClass(env.render(blankProps), 'rsb-bottom-panel')
+  env.findClass(bottomPanel, 'rsb-tab-picker-form').props.onSubmit({ preventDefault() {} })
+  tree = env.render(blankProps)
+
+  let panel = env.findClass(tree, 'rsb-panel')
+  env.rowWithText(panel, 'rsb-tree-row', path).props.onClick()
+  tree = env.render(blankProps)
+  let tabs = JSON.parse(env.storage.get(TABS_KEY_BASE + 'session-a'))
+  assert.deepEqual(tabs.tabs.map((tab) => tab.type), ['html-file', 'text-file'], 'Explorer must keep an explicit picker override as a separate tab')
+  const textId = tabs.tabs[1].id
+
+  panel = env.findClass(tree, 'rsb-panel')
+  env.rowWithText(panel, 'rsb-tree-row', path).props.onClick()
+  tree = env.render(blankProps)
+  tabs = JSON.parse(env.storage.get(TABS_KEY_BASE + 'session-a'))
+  assert.equal(tabs.tabs.length, 2, 'repeat Explorer selection must not duplicate the matching path-and-presentation tab')
+  assert.equal(tabs.active, textId, 'repeat Explorer selection must focus the matching path-and-presentation tab')
+}
+console.log('explorer extension routing check passed')
+
+// 7. With the Panel already open, a file select still lands: the live
 //    store subscription drains the request into the open Panel without a
 //    remount.
 {

@@ -314,10 +314,13 @@ const XTERM = (function () {
     const TAB_TYPE_TEXT_FILE = 'text-file'
     const TAB_TYPE_LOCALHOST_URL = 'localhost-url'
     const TAB_TYPE_TERMINAL = 'terminal'
-    // The preview type a file select opens (issue #21): a .md/.markdown
-    // file renders as Markdown, everything else as an HTML file preview.
+    // Explorer File Preview routing (issue #23): .html/.htm and .md/.markdown
+    // match without case; every other path uses the safe Text Preview fallback.
     function previewTypeFor(path) {
-      return /\.(md|markdown)$/i.test(String(path || '')) ? TAB_TYPE_MARKDOWN_FILE : TAB_TYPE_HTML_FILE
+      const value = String(path || '')
+      if (/\.html?$/i.test(value)) return TAB_TYPE_HTML_FILE
+      if (/\.(md|markdown)$/i.test(value)) return TAB_TYPE_MARKDOWN_FILE
+      return TAB_TYPE_TEXT_FILE
     }
     function tabsStorageKey(sessionId) { return TABS_KEY_BASE + sessionId }
     function normalizeTabUrl(raw) {

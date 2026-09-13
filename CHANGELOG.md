@@ -14,6 +14,10 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
   scrolls without wrapping,
   reports empty files, and rejects NUL-containing content as unsupported binary.
   File presentation remains part of tab identity and persists per session.
+- Explorer file selection now routes `.html` and `.htm` to HTML Preview,
+  `.md` and `.markdown` to Markdown Preview, and every other path to Text
+  Preview. Matching ignores letter case. Repeated selection focuses the tab
+  matching both path and presentation, while picker overrides remain separate.
 
 ### Fixed
 
