@@ -24,6 +24,8 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ### Fixed
 
+- Source Control file and group actions use the same SVG stroke icons and
+  button sizing as Fetch, Pull, Push, and Refresh, including discard confirmation.
 - New blank sessions show header-style Sidebar and Panel toggles at the
   top-right until DSH shows the real session header. Both regions remain
   available before the first message, without the old centered-to-header

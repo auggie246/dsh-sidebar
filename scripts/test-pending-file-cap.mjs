@@ -16,6 +16,18 @@ const sources = await Promise.all(
 )
 
 for (const { file, source } of sources) {
+  const iconSource = source.slice(source.indexOf('function GitIcon('), source.indexOf('// The Explorer', source.indexOf('function GitIcon(')))
+  for (const name of ['stage', 'unstage', 'discard', 'confirm', 'cancel']) {
+    assert.match(iconSource, new RegExp(name + ': \\[.+\\]'), file + ': action icon has SVG paths: ' + name)
+  }
+  const actions = source.slice(source.indexOf('function fileRow('), source.indexOf("return h('div', { className: 'rsb-status'"))
+  const buttons = actions.split('\n').filter((line) => line.includes("h('button'"))
+  assert.equal(buttons.length, 8, file + ': cover file and group actions, including discard confirmation')
+  for (const button of buttons) {
+    assert.match(button, /className: 'rsb-act rsb-icon-act/, file + ': file actions share toolbar button sizing')
+    assert.match(button, /'aria-label': '[^']+'/, file + ': icon actions have accessible names')
+    assert.match(button, /h\(GitIcon, \{ name: '[^']+' \}\)/, file + ': file actions use SVG icons, not text glyphs')
+  }
   assert.match(source, /const PF_MAX_ROWS = 6/, file + ': the pending cap must be six file rows')
   assert.match(source, /const pendingGroups = \[[\s\S]*'Merge Conflicts', data\.conflicts, 'conflicts'[\s\S]*'Staged Changes', data\.staged, 'staged'[\s\S]*'Changes', data\.unstaged, 'changes'[\s\S]*\]/, file + ': all three pending groups must share the capped scroll area')
   assert.match(source, /changeCount > PF_MAX_ROWS\s*\?\s*h\('div', \{ className: 'rsb-pending'/, file + ': the cap must apply only when more than six rows are pending')
