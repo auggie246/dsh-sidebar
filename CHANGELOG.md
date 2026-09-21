@@ -6,6 +6,11 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Blank-session Header Toggles shift left by the open Sidebar width, keeping
+  the controls beside the Sidebar instead of covering its top-right content.
+
 ## [0.5.3] - 2026-09-14
 
 ### Added

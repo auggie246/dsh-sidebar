@@ -32,9 +32,11 @@ right-edge turn-mark lane of the conversation (ADR 0008).
 The two region toggles (Sidebar and Panel) styled and positioned like the
 shell's session-header utilities. While a new session remains blank, DSH
 hides its header, so an overlay copy occupies the same top-right position.
-Once the session starts, the toggles render as plain inline content inside
-the real `conversation.session.header.utilities` row. Both seats use the
-same button factory, so their behavior and appearance stay consistent.
+When the overlay Sidebar opens, that copy shifts left by the remembered
+Sidebar width and stays beside it. Once the session starts, the toggles render
+as plain inline content inside the real
+`conversation.session.header.utilities` row. Both seats use the same button
+factory, so their behavior and appearance stay consistent.
 
 ## Card
 

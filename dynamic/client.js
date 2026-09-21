@@ -2240,7 +2240,7 @@ const XTERM = (function () {
       // of the Turn Navigator's right-edge turn-mark lane (ADR 0008).
       const rail = startedSession
         ? null
-        : h('div', { className: activeSession ? 'rsb-header-toggles rsb-header-toggles-blank' : 'rsb-rail' },
+        : h('div', { className: activeSession ? 'rsb-header-toggles rsb-header-toggles-blank' + (open ? ' rsb-header-toggles-blank-open' : '') : 'rsb-rail' },
           ...createRegionToggleButtons({
             open: open,
             panelOpen: panelOpen,
@@ -2283,6 +2283,7 @@ const XTERM = (function () {
       // button position. The Turn Navigator does not exist in that state.
       '.rsb-header-toggles { display: inline-flex; gap: 4px; }',
       '.rsb-header-toggles-blank { position: fixed; top: 14px; right: 28px; z-index: 60; pointer-events: auto; }',
+      '.rsb-header-toggles-blank-open { right: calc(var(--rsb-panel-w) + 28px); }',
       '.rsb-header-toggles button { appearance: none; box-sizing: border-box; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; margin: 0; padding: 0; border: none; border-radius: 6px; background: none; color: var(--dsw-alias-label-secondary); cursor: pointer; }',
       '.rsb-header-toggles button:hover:not(:disabled) { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }',
       '.rsb-header-toggles button:disabled { opacity: 0.4; cursor: default; }',
