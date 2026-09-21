@@ -3,15 +3,17 @@
 ## Vocabulary
 
 See [CONTEXT.md](../CONTEXT.md) for the glossary (Sidebar, Rail, Header
-Toggles, Card, Card Manifest, Sidebar Settings, Details Column,
+Toggles, Card, Card Manifest, Sidebar Settings, Details Column / Rightbar,
 Working Repository, Explorer).
 
 ## Key decisions
 
-- **Sidebar target: the DSH Web right Details Column.** The `details` shell
-  slot is the only real right-hand grid column; in current builds its shipped
-  occupant (the tool-call output viewer) has no entry point and is never
-  opened, so occupying it displaces no reachable UI.
+- **Sidebar target: the DSH Web right column** — the `details` slot on
+  pre-0.1.5 shells, the `rightbar` seat since DSH 0.1.5 (ADR 0009). The
+  plugin feature-detects the layout service face and speaks both dialects,
+  so one build owns the column on every supported shell; on 0.1.5 the
+  shipped right Sidebar's visible seat is shadowed while its service stays
+  live for Chat.
 - **Hero-only Rail via `shell.overlay`; in-session Header Toggles.** The
   layout owns whether the Details Column is open, so the re-entry point
   lives on the frame-wide overlay layer, pinned to the right edge. A

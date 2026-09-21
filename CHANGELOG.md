@@ -8,6 +8,17 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ### Fixed
 
+- DSH 0.1.5 compatibility (issue #25): the shell renamed the Details Column
+  to Rightbar — new `rightbar` slot, `openRightbar(track, fullscreen)` /
+  `closeRightbar()` layout methods, a `[data-side="rightbar"]` drag handle,
+  and a `data-rightbar-collapsed` marker. The plugin now feature-detects the
+  layout service face once at boot and speaks both dialects (ADR 0009), so
+  the docked Sidebar, width persistence, drag handles, and fresh-session
+  overlay behave the same on 0.1.5 as on 0.1.1 and 0.1.2. The shipped
+  `ui-sidebar-right` stays installed (Chat hard-injects its service); the
+  plugin's `rightbar` registration shadows only its visible seat.
+- The `@deepseek-ai/dsh-typert-protocol` peer dependency range now also
+  covers `^0.1.5-rc.0`.
 - Blank-session Header Toggles shift left by the open Sidebar width, keeping
   the controls beside the Sidebar instead of covering its top-right content.
 

@@ -93,11 +93,13 @@ request.
 
 ## Details Column
 
-DSH shell's name for the built-in right column of the 3-column layout
-(left session sidebar / center conversation / right details). Today it is owned
-by the built-in tool-call output viewer — which in the current shipped GUI has no
-entry point and is never opened — so the Sidebar occupies it without displacing
-any reachable UI.
+DSH shell's pre-0.1.5 name for the built-in right column of the 3-column
+layout (left session sidebar / center conversation / right details). DSH
+0.1.5 renamed it the **Rightbar**: the slot is `rightbar`, the layout
+service is `openRightbar` / `closeRightbar`, the drag handle is
+`[data-side="rightbar"]`, and the zeroed-column marker is
+`data-rightbar-collapsed`. The plugin speaks both dialects (ADR 0009) and
+owns the right column on every supported shell.
 
 ## Working Repository
 

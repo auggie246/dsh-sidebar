@@ -56,13 +56,13 @@ What you get:
 
 Cards are independent of one another: adding, removing, or hiding a Card must not affect other Cards, and future Cards join through the same Card Manifest. The Sidebar's width and the Panel's height are globally remembered region sizes that every workspace and session restores.
 
-Limitations: the Sidebar occupies DSH Web's right Details Column. If another plugin also uses that column, the most recently registered plugin wins. The Commit Graph is designed for clear everyday history browsing, not as a full Git GUI replacement.
+Limitations: the Sidebar occupies DSH Web's right column (the Details Column before DSH 0.1.5, the Rightbar since). On DSH 0.1.5 this shadows the built-in right Sidebar's visible panel: its service stays live, so Chat keeps mounting and its file links still reach the service, but no built-in panel renders the result while the Workspace Sidebar owns the seat. If another plugin also uses the column, the lowest-priority registration wins. The Commit Graph is designed for clear everyday history browsing, not as a full Git GUI replacement.
 
 ## Install
 
 ### Compatibility
 
-`dsh-sidebar` supports DeepSeek Harness 0.1.1-rc.2 and 0.1.2-rc.1. The same install steps apply to both versions. No per-version fallback is needed: the slot names (`details`, `shell.overlay`), the injected services (`shell`, `typert`, `subprocess`, `sandboxPolicy`, `slots`, `remote`, `timer`), and the plugin manifest format are unchanged between these releases. DSH resolves the plugin's peer dependencies by name only, and the declared `@deepseek-ai/dsh-typert-protocol` range covers both releases, so no manifest change is needed per version.
+`dsh-sidebar` supports DeepSeek Harness 0.1.1-rc.2, 0.1.2-rc.1, and 0.1.5-rc.2. The same install steps apply to every version. DSH 0.1.5 renamed the Details Column to Rightbar (new `rightbar` slot, `openRightbar`/`closeRightbar` layout methods, renamed frame attributes); the plugin feature-detects the layout service face at runtime and uses the matching dialect, so one build serves all supported releases with no per-version manifest change. On 0.1.5 the plugin keeps entirely out of the shipped left sidebar: it only occupies the rightbar seat it previously owned as the Details Column (ADR 0009). DSH resolves the plugin's peer dependencies by name only, and the declared `@deepseek-ai/dsh-typert-protocol` range covers all supported releases.
 
 ### Dependencies
 

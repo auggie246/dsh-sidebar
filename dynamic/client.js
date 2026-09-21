@@ -13,6 +13,31 @@ return {
       return
     }
     const layout = ctx.get('layout')
+
+    // DSH 0.1.5 renamed the shell's Details Column to Rightbar (issue
+    // #25, ADR 0009): the layout service trades openDetails/closeDetails
+    // for openRightbar(track, fullscreen)/closeRightbar(), the shell's
+    // drag handle moves from [data-side="details"] to
+    // [data-side="rightbar"], the zeroed-column marker moves from
+    // data-details-collapsed to data-rightbar-collapsed, and the
+    // session-scoped Details slot becomes the root-scoped rightbar seat.
+    // The structure underneath — frame child order, grid serialization,
+    // overlay layer parentage — is unchanged. Feature-detect the service
+    // face once here; every call site and selector below speaks both
+    // dialects, so a single build serves either shell.
+    const HAS_RIGHTBAR = !!(layout && typeof layout.openRightbar === 'function')
+    const HAS_DETAILS = !!(layout && typeof layout.openDetails === 'function')
+    // The Workspace Sidebar always docks, so the rightbar calls reserve
+    // the track and keep fullscreen off.
+    function openRightRegion() {
+      if (HAS_RIGHTBAR) return layout.openRightbar(true, false)
+      if (HAS_DETAILS) return layout.openDetails()
+    }
+    function closeRightRegion() {
+      if (HAS_RIGHTBAR) return layout.closeRightbar()
+      if (HAS_DETAILS) return layout.closeDetails()
+    }
+
     const h = React.createElement
     // >>> GENERATED: vendored @xterm/xterm 5.5.0 — edit lib/vendor/xterm/ and run: npm run sync:vendor >>>
 const XTERM = (function () {
@@ -266,7 +291,11 @@ const XTERM = (function () {
     }
     function onFramePointerDown(e) {
       const target = e && e.target
-      dockedFollow.armed = !!(target && target.closest && target.closest('[data-side="details"]'))
+      // The shell's right-column drag handle moved from
+      // [data-side="details"] to [data-side="rightbar"] on DSH 0.1.5;
+      // accept either form so the persisted release works on both shells.
+      dockedFollow.armed = !!(target && target.closest
+        && (target.closest('[data-side="details"]') || target.closest('[data-side="rightbar"]')))
     }
     function onWindowPointerUp() {
       if (!dockedFollow.armed) return
@@ -2115,6 +2144,33 @@ const XTERM = (function () {
         h(SidebarPanel, props))
     }
 
+    // Rightbar seat (DSH 0.1.5, issue #25, ADR 0009): the new right column
+    // is root-scoped, so its props carry no framework-owned sessionId.
+    // Resolve the current session from the root props exactly the way the
+    // header toggles do, then render the same docked body the Details
+    // Column hosted on older shells. The seat stays empty while the
+    // Sidebar is closed or the session has not started — the old shell
+    // hard-zeroed its Details Column in those states, and the floating
+    // overlay Sidebar covers the fresh-session case there too.
+    function RightbarDock(props) {
+      const open = useStore(openStore)
+      const startedSessionId = props && props.useSessions
+        ? props.useSessions((s) => {
+            const current = s && s.current
+            return current !== undefined && s.byId && s.byId[current] && s.byId[current].blank === false
+              ? current
+              : undefined
+          })
+        : (props && props.sessionId) || undefined
+      if (!open) return null
+      if (!startedSessionId) return null
+      // The frame reports canShow=false when the right column cannot hold
+      // its minimum beside the center; the track is zero then, so the
+      // seat must render nothing instead of spilling out of it.
+      if (props && props.canShow === false) return null
+      return h(SidebarPanel, Object.assign({}, props, { docked: true, sessionId: startedSessionId }))
+    }
+
     // Region Toggles (ADR 0008): one factory builds the two-button pair —
     // the Sidebar toggle first, the Panel toggle second — for both seats
     // that carry them (the hero Rail and the session Header Toggles), so
@@ -2133,10 +2189,10 @@ const XTERM = (function () {
           'aria-label': props.open ? 'Collapse workspace sidebar' : 'Open workspace sidebar',
           onClick: () => {
             if (props.open) {
-              if (props.startedSession) layout.closeDetails()
+              if (props.startedSession) closeRightRegion()
               setSidebarOpen(false)
             } else {
-              if (props.startedSession) layout.openDetails()
+              if (props.startedSession) openRightRegion()
               setSidebarOpen(true)
             }
           },
@@ -2208,8 +2264,8 @@ const XTERM = (function () {
       React.useEffect(() => {
         if (!startedSession || !layout) return
         if (open) {
-          layout.openDetails()
-          // Issue #15: the shell resets the Details Column to its default
+          openRightRegion()
+          // Issue #15: the shell resets the right column to its default
           // width on every session switch. Re-apply the globally
           // remembered width after the shell commits its reopen render.
           // The plugin-owned docked handle keeps later drags on that track.
@@ -2217,7 +2273,7 @@ const XTERM = (function () {
           scheduleDockedWidthFollow()
           watchDockedWidth()
         } else {
-          layout.closeDetails()
+          closeRightRegion()
         }
         return unwatchDockedWidth
       }, [startedSessionId, open])
@@ -2301,6 +2357,9 @@ const XTERM = (function () {
       // The shell handle reads its separate transient Details width. Hide it
       // while this Sidebar owns the column, then use the handle below.
       'div:has(> div:nth-child(3) .rsb-docked-panel) > [data-side="details"] { display: none; }',
+      // DSH 0.1.5 renamed the shell handle [data-side="rightbar"]; hide
+      // that form too. On older shells this rule matches nothing.
+      'div:has(> div:nth-child(3) .rsb-docked-panel) > [data-side="rightbar"] { display: none; }',
       // Left-edge drag handle (issue #15): a thin full-height strip that
       // overhangs the Sidebar border for a comfortable grab zone. The
       // width itself lives in --rsb-panel-w, which the drag handler
@@ -2315,6 +2374,10 @@ const XTERM = (function () {
       // details, overlay layer follow). Reserving the panel width there makes
       // the conversation resize instead of being covered.
       '[data-details-collapsed]:has([data-shell-overlay] .rsb-overlay-panel) > div:nth-child(2) { padding-right: var(--rsb-panel-w); transition: padding-right var(--ds-transition-duration-slow) var(--ds-ease-in-out); }',
+      // DSH 0.1.5 renamed the zeroed-column marker to
+      // data-rightbar-collapsed; same reservation rule under the new name.
+      // On older shells this rule matches nothing.
+      '[data-rightbar-collapsed]:has([data-shell-overlay] .rsb-overlay-panel) > div:nth-child(2) { padding-right: var(--rsb-panel-w); transition: padding-right var(--ds-transition-duration-slow) var(--ds-ease-in-out); }',
       // The Panel (ADR 0001): a plugin-local fixed region mirroring
       // the center conversation column's box. The reservation rule walks
       // the same structure the BottomPanel measurement does: the frame is
@@ -2481,6 +2544,12 @@ const XTERM = (function () {
     if (XTERM && XTERM.css) styles.insert([XTERM.css])
 
     slots.inject('details', () => slots.register({ name: 'details', priority: -1 }, (props) => h(SidebarPanel, Object.assign({}, props, { docked: true }))))
+    // DSH 0.1.5 rightbar seat (issue #25, ADR 0009): single kind, so the
+    // lower priority than the shipped occupant's makes this entry the
+    // winner — the Workspace Sidebar owns the right column it owned as
+    // the Details Column on older shells. Older shells never declare this
+    // slot, and the inject() wait never fires.
+    slots.inject('rightbar', () => slots.register({ name: 'rightbar', priority: -1 }, (props) => h(RightbarDock, props)))
     slots.inject('shell.overlay', () => slots.register({ name: 'shell.overlay', id: 'rside-rail', label: 'Workspace sidebar' }, (props) => h(Rail, props)))
     // ADR 0008: in-session region toggles live in the session-header
     // utilities row; order 10 places them after the shipped entries.
