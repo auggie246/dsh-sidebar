@@ -38,6 +38,13 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ### Fixed
 
+- `scripts/verify-web-profile-install.mjs` reads the sidebar composition row
+  from the package's own bundle patch, which is where DSH applies it, instead of
+  requiring it in the profile's `cordis.patch.yml`. It also fails when the row
+  is in both layers, because a duplicate loader entry id stops the profile from
+  booting. The README install steps told users to make exactly that mistake, and
+  they are corrected.
+
 - Exactly one right-region control set on DSH 0.1.5 (issue #26): the shipped
   Rightbar registers an expand control for its collapsed column into the
   `conversation.session.header.corner` seat, so a fresh load showed two
