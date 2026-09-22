@@ -67,7 +67,8 @@ One closable, switchable content unit inside the Panel, modeled on VS Code
 editor tabs. Every Panel Tab has a type (e.g. interactive shell, browser
 preview, rendered preview). The user creates tabs with a "+" picker inside
 the Panel and closes each tab with its own control. Closing the last tab
-leaves the Panel open but empty.
+leaves the Panel open but empty. Not to be confused with a Tab Type, which
+belongs to the shipped Rightbar.
 
 ## File Preview
 
@@ -99,7 +100,25 @@ layout (left session sidebar / center conversation / right details). DSH
 service is `openRightbar` / `closeRightbar`, the drag handle is
 `[data-side="rightbar"]`, and the zeroed-column marker is
 `data-rightbar-collapsed`. The plugin speaks both dialects (ADR 0009) and
-owns the right column on every supported shell.
+owns the right column on every supported shell. On 0.1.5 the shipped Rightbar
+is a working tabbed sidebar with its own Files tree; the plugin still shadows
+its visible seat, because the shipped Rightbar cannot stack views vertically
+(ADR 0010).
+
+## Pane
+
+One bounded box below the Rightbar's tab strip, with its own strip. The
+Rightbar starts with one Pane and splits it into at most two, always side by
+side, with a draggable divider between 20% and 80% width. There is no vertical
+split and no bottom region. This limit is why the plugin keeps its own column
+(ADR 0010), and the word Pane is never used for the plugin's own surfaces.
+
+## Tab Type
+
+The Rightbar's extension unit. A Tab Type is declared once with its kind, its
+address patterns, and its guide entry, and its body is registered separately
+into the keyed tab seat. A Tab Type is not a Panel Tab: a Tab Type belongs to
+the shipped Rightbar, and a Panel Tab belongs to this plugin's bottom Panel.
 
 ## Working Repository
 
