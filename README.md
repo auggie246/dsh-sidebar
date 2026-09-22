@@ -76,15 +76,15 @@ Limitations: the Sidebar occupies DSH Web's right column (the Details Column bef
 dsh plugin --profile web add dsh-sidebar
 ```
 
-Open `~/.dsh/profiles/web/cordis.patch.yml` and add:
+That command is the whole install. It adds `dsh-sidebar` to the profile's `dsh.profile.bundles` list, and DSH then applies the patch file the package itself declares in `dsh.bundle.patch`. That patch inserts the sidebar's host row, so you do not edit the profile by hand.
 
-```yaml
-- insert:
-    - id: sidebar
-      name: 'dsh-sidebar'
+Do **not** add the `id: sidebar` row to `~/.dsh/profiles/web/cordis.patch.yml`. The bundle patch already inserts it, and a second insert gives the loader two entries with one id. The loader refuses that and the profile will not boot. The row in [`cordis.patch.example.yml`](cordis.patch.example.yml) is a reference copy of the bundle patch, not an extra step.
+
+To confirm the row is composed before you restart, run:
+
+```sh
+dsh --profile web --dump-config | grep -A1 'id: sidebar'
 ```
-
-You can also copy the same entry from [`cordis.patch.example.yml`](cordis.patch.example.yml).
 
 Restart DSH Web, open a session, then select the arrow on the far right edge of the page to open the sidebar.
 
@@ -107,14 +107,16 @@ To pin a version, append `#main`, `#v0.4.0`, or a commit SHA to the Git URL.
 
 ### Uninstall
 
-1. Remove the `dsh-sidebar` block from `~/.dsh/profiles/web/cordis.patch.yml`.
-2. Run:
+1. Run:
 
    ```sh
    dsh plugin --profile web remove dsh-sidebar
    ```
 
-3. Restart `dsh web`.
+   That removes both the dependency and its `dsh.profile.bundles` entry. Leave
+   `~/.dsh/profiles/web/cordis.patch.yml` alone: the sidebar row was never in it.
+
+2. Restart `dsh web`.
 
 ## Usage
 
@@ -169,7 +171,7 @@ Want to try the sidebar without installing it permanently? The repository includ
 
 ### Troubleshooting
 
-- **The sidebar is missing:** confirm the composition entry is in the Web profile, restart `dsh web`, then open the arrow on the far right edge.
+- **The sidebar is missing:** confirm `dsh-sidebar` is listed in the profile's `dsh.profile.bundles`. `dsh --profile web --dump-config` prints the composed tree, and it must contain `- id: sidebar`. Then restart `dsh web` and open the arrow on the far right edge.
 - **The built-in right-panel tabs are missing:** expected on DSH 0.1.5. The plugin's `rightbar` registration shadows the built-in right Sidebar's panel, so its Files and Documents tabs have no visible surface. The plugin's own cards replace them. See the limitations above.
 - **“Not a git repository”:** open a session whose workspace is inside a Git repository.
 - **Fetch, pull, or push fails:** check that Git is installed and that the host has the required Git credentials. Pull and push also need an upstream branch. On hosts where DSH runs the session under its file sandbox, ssh can refuse its system config because the sandbox masks file ownership outside the workspace ("Bad owner or permissions on /etc/ssh/ssh_config.d/…"). The card retries on that error with your own `~/.ssh/config`, then with a config-free ssh — so your host aliases, ports and identity settings still apply and no key name is hard-coded. The same push or pull in your own terminal is never affected.

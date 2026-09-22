@@ -1,10 +1,18 @@
-# Example composition row for dsh-sidebar.
+# The composition row for dsh-sidebar, for reference.
 #
-# Append this entry to your web profile's patch layer at
-#   $DSH_HOME/profiles/web/cordis.patch.yml   (usually ~/.dsh/profiles/web/cordis.patch.yml)
-# then restart `dsh web`.
+# You do NOT add this row by hand. `package.json` declares
+#   "dsh": { "bundle": { "patch": "./cordis.patch.yml" } }
+# and DSH applies that patch file for every entry of `dsh.profile.bundles`. So
+#   dsh plugin --profile web add dsh-sidebar
+# is the whole install: it lists the bundle, and the bundle inserts this row.
 #
-# Remove it (and run `dsh plugin --profile web remove dsh-sidebar`) to uninstall.
+# Do not append this row to $DSH_HOME/profiles/web/cordis.patch.yml either. The
+# bundle patch already inserts it, and a second insert gives the loader two
+# entries with the id `sidebar`. The loader refuses a duplicate entry id with
+# "duplicate loader entry id: sidebar", and the profile will not boot.
+#
+# To check the row is composed: dsh --profile web --dump-config
+# To uninstall:                dsh plugin --profile web remove dsh-sidebar
 
 - insert:
     - id: sidebar
