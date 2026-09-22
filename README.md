@@ -40,7 +40,7 @@ Every git action the cards run is scoped by DSH's file sandbox to the Working Re
 
 ## Background
 
-`dsh-sidebar` is the Sidebar Package for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web. DSH Web renders a three-column shell: sessions on the left, the conversation in the center, and a Details Column on the right that the shipped GUI owns but leaves without a reachable entry point. The Sidebar occupies that column, so no reachable UI is displaced. On the new-session page it collapses to a Rail on the right edge and re-expands from it; inside a session the same two region toggles live in the session header's utilities row (see [CONTEXT.md](CONTEXT.md)). A bottom Panel, modeled on the VS Code terminal panel, hosts closable Panel Tabs and is independent of the Sidebar.
+`dsh-sidebar` is the Sidebar Package for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web. DSH Web renders a three-column shell: sessions on the left, the conversation in the center, and a right column that belongs to the shipped GUI. Before DSH 0.1.5 that column was the Details Column, whose shipped occupant had no reachable entry point. On DSH 0.1.5 it is the Rightbar, home of the built-in right Sidebar. The plugin occupies that column on every supported shell. It therefore displaces no reachable panel before 0.1.5, and it shadows the built-in right Sidebar's panel on 0.1.5 (see the limitations below). With no session yet, a Rail on the right edge opens the regions. While a session is blank, the same two region toggles sit at the header's top-right position, and they shift left while the Sidebar is open. Inside a started session they live in the session header's utilities row (see [CONTEXT.md](CONTEXT.md)). A bottom Panel, modeled on the VS Code terminal panel, hosts closable Panel Tabs and is independent of the Sidebar.
 
 What you get:
 
@@ -56,7 +56,7 @@ What you get:
 
 Cards are independent of one another: adding, removing, or hiding a Card must not affect other Cards, and future Cards join through the same Card Manifest. The Sidebar's width and the Panel's height are globally remembered region sizes that every workspace and session restores.
 
-Limitations: the Sidebar occupies DSH Web's right column (the Details Column before DSH 0.1.5, the Rightbar since). On DSH 0.1.5 this shadows the built-in right Sidebar's visible panel: its service stays live, so Chat keeps mounting and its file links still reach the service, but no built-in panel renders the result while the Workspace Sidebar owns the seat. If another plugin also uses the column, the lowest-priority registration wins. The Commit Graph is designed for clear everyday history browsing, not as a full Git GUI replacement.
+Limitations: the Sidebar occupies DSH Web's right column (the Details Column before DSH 0.1.5, the Rightbar since). On DSH 0.1.5 the plugin's seat registration shadows the built-in right Sidebar's panel at all times, including while the Workspace Sidebar is closed. The built-in service stays live, so Chat keeps mounting and its file links still reach the service, but nothing renders the result, and the built-in Files and Documents tabs have no visible panel. If another plugin also uses the column, the lowest-priority registration wins. The Commit Graph is designed for clear everyday history browsing, not as a full Git GUI replacement.
 
 ## Install
 
@@ -166,6 +166,7 @@ Want to try the sidebar without installing it permanently? The repository includ
 ### Troubleshooting
 
 - **The sidebar is missing:** confirm the composition entry is in the Web profile, restart `dsh web`, then open the arrow on the far right edge.
+- **The built-in right-panel tabs are missing:** expected on DSH 0.1.5. The plugin's `rightbar` registration shadows the built-in right Sidebar's panel, so its Files and Documents tabs have no visible surface. The plugin's own cards replace them. See the limitations above.
 - **“Not a git repository”:** open a session whose workspace is inside a Git repository.
 - **Fetch, pull, or push fails:** check that Git is installed and that the host has the required Git credentials. Pull and push also need an upstream branch. On hosts where DSH runs the session under its file sandbox, ssh can refuse its system config because the sandbox masks file ownership outside the workspace ("Bad owner or permissions on /etc/ssh/ssh_config.d/…"). The card retries on that error with your own `~/.ssh/config`, then with a config-free ssh — so your host aliases, ports and identity settings still apply and no key name is hard-coded. The same push or pull in your own terminal is never affected.
 - **A commit fails:** make sure Git has a configured author identity and that your commit message is not empty.
