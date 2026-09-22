@@ -58,6 +58,30 @@ Working Repository, Explorer).
   together form tab identity. Legacy Panel state migrates once by these rules,
   then `schema: 1` makes saved presentation types authoritative. See
   [plain-text-file-preview-design.md](plain-text-file-preview-design.md).
+- **Text Preview colour comes from a vendored Prism, inlined into both twins.**
+  The GUI serves one file per client plugin, so the library cannot be a sibling
+  file: `npm run sync:vendor` writes it between markers in `lib/client.js` and
+  `dynamic/client.js`, the same pattern as the vendored xterm. Only files up to
+  512 KB are coloured, and the toolbar reports what the rows actually are
+  rather than the grammar it would have used. Each source line is one row with
+  its own gutter number; a token that crosses a newline is closed on its line
+  and reopened on the next, so every row is well formed and can wrap on its
+  own. `test-highlight-parity.mjs` asserts one rendering for both twins.
+- **Diff Preview is one tab per path, whatever the change's state.** The host
+  `gitDiff` runs `git diff HEAD --no-color -- <path>` on `readFile`'s exact
+  confinement and sandbox path. A staged and an unstaged change therefore
+  arrive as one diff and share one tab. An empty reply means no change against
+  `HEAD` — an untracked file, or a reverted one — and the tab then renders its
+  Text Preview body under the same tab type and identity, so a later change to
+  that path fills the same tab.
+- **A chip on the Files Changed Row reaches the Panel through the shipped service.** The
+  "Files changed" row calls `ctx.sidebarRight.openResource` with a
+  `dsh-resource://file/…` address. The plugin wraps that method on the service
+  instance, parses the address, and routes a file address into the same
+  pending-open store the Explorer uses (ADR 0007); the original method is never
+  called, so the shell column cannot expand, and a dispose restores it. Every
+  other address keeps the shipped behaviour. See ADR 0012 for the accepted
+  freeze risk and the rejected alternatives.
 - **Two distribution forms share the codebase** (see README): a composition
   package (`lib/`, permanent install) and a dynamic bundle (`dynamic/`,
   session-only install). Keep them behaviorally in sync.

@@ -6,7 +6,7 @@
 
 A Git sidebar for DeepSeek Harness Web.
 
-`dsh-sidebar` puts source control beside your DSH session: review changes, stage files, write commits, sync with a remote, and browse the commit graph without leaving the browser. A bottom Panel adds file preview, Markdown, and a live terminal. The sidebar automatically follows the repository in the active session's workspace and uses the Git credentials already configured on the machine running `dsh web`.
+`dsh-sidebar` puts source control beside your DSH session: review changes, stage files, write commits, sync with a remote, and browse the commit graph without leaving the browser. A bottom Panel adds file preview, Markdown, diffs, and a live terminal. The sidebar automatically follows the repository in the active session's workspace and uses the Git credentials already configured on the machine running `dsh web`.
 
 ## Table of Contents
 
@@ -45,7 +45,7 @@ Every git action the cards run is scoped by DSH's file sandbox to the Working Re
 What you get:
 
 - A collapsible sidebar on the right side of DSH Web
-- A bottom Panel with Panel Tabs — file preview, Markdown, and a live terminal — available as soon as a session exists
+- A bottom Panel with Panel Tabs — file preview, Markdown, diffs, and a live terminal — available as soon as a session exists
 - Source control for the active session's workspace
 - A view-only file explorer over the active session's workspace (the Explorer card)
 - Staged, unstaged, untracked, and conflicting-file views
@@ -136,11 +136,15 @@ The **Commit Graph** card displays commits from every local and remote ref. Each
 
 ### File previews
 
-Use the Panel **+** picker to open a workspace path as **HTML file**, **Markdown file**, or **Text file**. Each choice is explicit, so the same path can stay open under different presentations.
+Use the Panel **+** picker to open a workspace path as **HTML file**, **Markdown file**, **Text file**, or **Diff**. Each choice is explicit, so the same path can stay open under different presentations.
 
 On the first load after this upgrade, saved File Previews migrate once by extension. HTML and Markdown files keep their rendered presentations. Every other file becomes Text Preview. Later picker choices remain unchanged across Panel remounts and page reloads.
 
-Text Preview shows inert source text with theme colors and a monospace font. It preserves whitespace, keeps long lines unwrapped, and scrolls in both directions. Empty files show `File is empty.`. Files containing a NUL byte show `Binary files are not supported.` instead. The existing `2 MB` limit and read errors apply to every File Preview.
+Text Preview shows inert source text with theme colors and a monospace font. It preserves whitespace, keeps long lines unwrapped, and scrolls in both directions. One row carries one source line and its gutter number. A toolbar row carries the path, a copy control, and a wrap toggle, and a hint points at the browser's own find. Source under `512 KB` is coloured for its language — 20 common languages are vendored with Prism — and anything larger renders plain. Empty files show `File is empty.`. Files containing a NUL byte show `Binary files are not supported.` instead. The existing `2 MB` limit and read errors apply to every File Preview.
+
+Diff Preview shows one unified change against `HEAD`, with the old number, the new number, and the `-`/`+`/space marker on each row. Open it by selecting a **Source Control** file name, or through the picker. A staged and an unstaged change to one path share the one tab. A file with no change against `HEAD` — an untracked file, or one you just reverted — shows its Text Preview under the same tab instead.
+
+Selecting a file chip on the conversation's **Files Changed Row** opens that file as a Panel Tab. When the file opens as a Text Preview — or as a Diff Preview that falls back to one — the reported line is marked and scrolled into view. A rendered HTML or Markdown tab has no source row to mark, so it opens unmarked. The chip never opens the shipped Rightbar column.
 
 ### Explorer
 
@@ -180,6 +184,7 @@ Want to try the sidebar without installing it permanently? The repository includ
 
 - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) — this plugin extends DSH Web through its Cordis plugin and slot system.
 - [xterm.js](https://xtermjs.org/) — vendored under [`lib/vendor/xterm`](lib/vendor/xterm) (MIT) and powering the Terminal Panel Tab.
+- [Prism](https://prismjs.com/) — vendored under [`lib/vendor/prism`](lib/vendor/prism) (MIT) and colouring the Text Preview.
 
 ## Contributing
 

@@ -495,6 +495,59 @@ return {
       }
     })
 
+    harness.handle('gitDiff', async (args) => {
+      // Diff Preview (issue #27): one file's change against HEAD as a unified
+      // diff, mirrored from the lib controller — readFile's exact confinement
+      // walk (plain-string based, re-checked on the realpath so a symlink
+      // inside the Working Repository pointing outside it cannot escape).
+      // `--no-color` pins the format whatever the user's color.ui says, so the
+      // client parser never sees an escape sequence. An unborn HEAD has
+      // nothing to compare against, and git says so on stderr; that is an
+      // empty diff, not a failure, because the client shows the Text Preview
+      // for a file with no change. The reply is capped like readFile's, so one
+      // enormous change cannot flood the channel.
+      try {
+        const rootRaw = cwdOf(args)
+        const root = rootRaw.length > 1 ? rootRaw.replace(/\/+$/, '') : '/'
+        const path = String((args && args.path) == null ? '' : args.path).trim()
+        if (!path) throw new Error('no path given')
+        if (path.indexOf('\0') !== -1) throw new Error('path contains a NUL byte')
+        let rel = path
+        if (path[0] === '/') {
+          if (root === '/') rel = path.slice(1)
+          else if (path === root) rel = ''
+          else if (path.indexOf(root + '/') === 0) rel = path.slice(root.length + 1)
+          else throw new Error('path escapes the working repository')
+        }
+        const parts = []
+        for (const segment of rel.split('/')) {
+          if (segment === '' || segment === '.') continue
+          if (segment === '..') {
+            if (parts.length === 0) throw new Error('path escapes the working repository')
+            parts.pop()
+            continue
+          }
+          parts.push(segment)
+        }
+        const abs = parts.length ? root + '/' + parts.join('/') : root
+        const realRes = await shell.run(shell.resolve({ command: 'realpath -- ' + shq(abs), timeoutMs: 15000, sandboxPolicy: repoPolicy(root) }))
+        if (realRes.exitCode !== 0) throw new Error(out(realRes.stderr).trim() || 'cannot read file')
+        const real = out(realRes.stdout).trim()
+        if (root !== '/' && real !== root && real.indexOf(root + '/') !== 0) throw new Error('path escapes the working repository')
+        const r = await git(rootRaw, 'diff HEAD --no-color -- ' + shq(real), { timeoutMs: 30000 })
+        if (r.code !== 0) {
+          if (/ambiguous argument 'HEAD'|bad revision 'HEAD'|unknown revision|does not have any commits|not a git repository/i.test(r.err)) {
+            return { ok: true, diff: '' }
+          }
+          throw new Error(r.err || 'git diff failed')
+        }
+        if (r.out.length > READ_FILE_LIMIT) throw new Error('diff is larger than the 2 MB preview limit')
+        return { ok: true, diff: r.out }
+      } catch (e) {
+        return { ok: false, error: String((e && e.message) || e) }
+      }
+    })
+
     harness.handle('listDir', async (args) => {
       // Explorer (issue #21): list ONE directory level of the workspace,
       // mirrored from the lib controller — readFile's exact confinement

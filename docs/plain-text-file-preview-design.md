@@ -1,6 +1,8 @@
 # Plain-text file preview design
 
 Status: picker-based Text Preview and Explorer routing implemented by issues #22 and #23.
+Issue #27 upgraded the presentation rules below and added the Diff Preview; the
+four rules it replaced are marked in place.
 
 Delivery is split across three tickets. Issue #22 adds picker-based Text Preview.
 Issue #23 adds Explorer routing. Issue #24 adds legacy Panel-state migration.
@@ -43,11 +45,12 @@ A Text Preview has these presentation rules:
 - Use the application theme colors.
 - Use a monospace font.
 - Preserve line breaks, spaces, and tabs.
-- Do not wrap long lines.
+- Do not wrap long lines by default. A toolbar Wrap toggle softens this per tab (issue #27).
 - Provide vertical and horizontal scrolling.
-- Do not show line numbers.
-- Do not apply syntax highlighting.
-- Do not show a hint bar.
+- Show line numbers in a gutter, one row per source line (issue #27; previously no line numbers).
+- Colour the source for its language up to 512 KB, and render plain above it (issue #27; previously no syntax highlighting).
+- Carry a toolbar row with the path, a copy control, a wrap toggle, and a hint at the browser's own find (issue #27; previously no hint bar).
+- Mark the line a caller reported, and bring that row into view (issue #27).
 - Show `File is empty.` when the file has no content.
 
 Render content as text, not as HTML `srcdoc`.
