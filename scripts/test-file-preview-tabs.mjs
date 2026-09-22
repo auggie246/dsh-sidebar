@@ -351,7 +351,7 @@ function openFileTab(env, itemLabel, path) {
   const next = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
   assert.ok(env.findClass(next, 'rsb-tab-picker'), 'clicking + must open the type picker')
   const items = env.findAll(next, 'rsb-tab-picker-item')
-  assert.equal(items.length, 5, 'the picker must list Localhost URL, all three file presentations, and Terminal')
+  assert.equal(items.length, 6, 'the picker must list Localhost URL, all four file presentations, and Terminal')
   const labels = items.map((item) => {
     const strings = []
     env.collectStrings(item, strings)
@@ -361,7 +361,8 @@ function openFileTab(env, itemLabel, path) {
   assert.ok(labels[1].includes('HTML file') && labels[1].includes('Preview a repo file in an iframe'), 'the HTML file item must carry its title and sub')
   assert.ok(labels[2].includes('Markdown file') && labels[2].includes('Render a repo Markdown file'), 'the Markdown file item must carry its title and sub')
   assert.ok(labels[3].includes('Text file') && labels[3].includes('Preview a repo file as source text'), 'the Text file item must carry its title and sub')
-  assert.ok(labels[4].includes('Terminal'), 'the Terminal item from ticket #8 stays last')
+  assert.ok(labels[4].includes('Diff') && labels[4].includes('Compare one repo file with the last commit'), 'the Diff item must carry its title and sub (issue #27)')
+  assert.ok(labels[5].includes('Terminal'), 'the Terminal item from ticket #8 stays last')
 }
 
 // 2. The HTML file flow: the form matches the URL form structure, submitting
@@ -502,19 +503,51 @@ function openFileTab(env, itemLabel, path) {
   panel = openFileTab(env, 'Text file', 'notes.txt')
   await tick()
   panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
-  const preview = env.findClass(panel, 'rsb-text-preview')
+  const preview = env.findClass(panel, 'rsb-fp-body')
   assert.ok(preview, 'a loaded Text Preview must render a source-text surface')
-  assert.equal(preview.type, 'pre', 'the source-text surface must preserve whitespace natively')
-  const sourceText = []
-  env.collectStrings(preview, sourceText)
-  assert.equal(sourceText.join(''), DEFAULT_FILES['notes.txt'], 'markup, spaces, tabs, and line breaks must remain inert source text')
+  // Issue #27: one row per source line, each with its own gutter number and
+  // escaped source HTML, so a line can wrap and be marked on its own.
+  const lines = env.findAll(panel, 'rsb-fp-line')
+  assert.equal(lines.length, 3, 'one row per source line')
+  assert.deepEqual(
+    lines.map((line) => line.props['data-line']),
+    [1, 2, 3],
+    'every row must carry its own line number for the gutter and the mark',
+  )
+  assert.deepEqual(
+    lines.map((line) => env.findClass(line, 'rsb-fp-src').props.dangerouslySetInnerHTML.__html),
+    ['first line', '\tindented  words', '&lt;script&gt;alert(1)&lt;/script&gt;'],
+    'markup, spaces, tabs, and line breaks must remain inert source text',
+  )
+  assert.deepEqual(
+    lines.map((line) => env.findClass(line, 'rsb-fp-no').props.children[0]),
+    ['1', '2', '3'],
+    'the gutter must number every row',
+  )
   assert.equal(env.findClass(panel, 'rsb-tabframe'), null, 'Text Preview must not render an iframe')
   assert.equal(env.findClass(panel, 'rsb-tabframe-hint'), null, 'Text Preview must not render a hint bar')
-  assert.match(env.stylesheet, /\.rsb-text-preview \{[^}]*overflow: auto/, 'Text Preview must scroll vertically and horizontally')
-  assert.match(env.stylesheet, /\.rsb-text-preview \{[^}]*white-space: pre;/, 'Text Preview must preserve whitespace without wrapping')
-  assert.match(env.stylesheet, /\.rsb-text-preview \{[^}]*font-family: ui-monospace/, 'Text Preview must use a monospace font')
-  assert.match(env.stylesheet, /\.rsb-text-preview \{[^}]*color: var\(--dsw-alias-label-primary\)/, 'Text Preview must use application theme text color')
-  assert.match(env.stylesheet, /\.rsb-text-preview \{[^}]*background: var\(--dsw-alias-bg-base\)/, 'Text Preview must use application theme background color')
+  assert.match(env.stylesheet, /\.rsb-fp-body \{[^}]*overflow: auto/, 'Text Preview must scroll vertically and horizontally')
+  assert.match(env.stylesheet, /\.rsb-fp-line \{[^}]*white-space: pre;/, 'Text Preview must preserve whitespace without wrapping')
+  assert.match(env.stylesheet, /\.rsb-fp-body \{[^}]*font-family: ui-monospace/, 'Text Preview must use a monospace font')
+  assert.match(env.stylesheet, /\.rsb-fp-src \{[^}]*color: var\(--dsw-alias-label-primary\)/, 'Text Preview must use application theme text color')
+  assert.match(env.stylesheet, /\.rsb-fp-body \{[^}]*background: var\(--dsw-alias-bg-base\)/, 'Text Preview must use application theme background color')
+  // Issue #27 toolbar: the path, a copy control, a wrap toggle, and a hint at
+  // the browser's own find instead of a plugin-owned search UI.
+  const bar = env.findClass(panel, 'rsb-fp-bar')
+  const barText = []
+  env.collectStrings(bar, barText)
+  assert.ok(barText.join(' ').includes('notes.txt'), 'the toolbar must carry the path')
+  assert.ok(barText.join(' ').includes('Ctrl/⌘ + F'), 'the toolbar must hint at the browser find')
+  assert.ok(env.buttonWithText(bar, 'Copy'), 'the toolbar must carry a copy control')
+  assert.ok(env.buttonWithText(bar, 'Wrap'), 'the toolbar must carry a wrap toggle')
+  const wrapButton = env.buttonWithText(bar, 'Wrap')
+  assert.equal(wrapButton.props['aria-pressed'], 'false', 'wrap must start off')
+  const bodyClasses = () => env.findClass(env.findClass(env.render(startedProps), 'rsb-bottom-panel'), 'rsb-fp-body').props.className
+  assert.equal(bodyClasses().includes('rsb-fp-wrap'), false, 'wrap off must not add the wrapping class')
+  env.buttonWithText(env.findClass(env.render(startedProps), 'rsb-bottom-panel'), 'Wrap').props.onClick()
+  assert.equal(env.buttonWithText(env.findClass(env.render(startedProps), 'rsb-bottom-panel'), 'Wrap').props['aria-pressed'], 'true', 'the wrap toggle must report its state')
+  assert.equal(bodyClasses().includes('rsb-fp-wrap'), true, 'wrap on must add the wrapping class')
+  assert.match(env.stylesheet, /\.rsb-fp-wrap \.rsb-fp-line \{[^}]*white-space: pre-wrap/, 'the wrap class must soften the row whitespace')
   panel = openFileTab(env, 'Text file', 'notes.txt')
   assert.equal(env.findAll(panel, 'rsb-tab').length, 1, 'reopening the same path as Text must focus its existing tab')
   assert.equal(env.remoteCalls.length, 1, 'reopening the same path as Text must reuse its loaded content')
@@ -536,7 +569,7 @@ function openFileTab(env, itemLabel, path) {
   const binaryText = []
   binaryEnv.collectStrings(binaryEnv.findClass(binaryPanel, 'rsb-text-binary'), binaryText)
   assert.ok(binaryText.join(' ').includes('Binary files are not supported.'), 'a NUL byte must show the unsupported-binary state')
-  assert.equal(binaryEnv.findClass(binaryPanel, 'rsb-text-preview'), null, 'binary content must not render decoded source text')
+  assert.equal(binaryEnv.findClass(binaryPanel, 'rsb-fp-line'), null, 'binary content must not render decoded source text')
 
   for (const presentation of ['HTML file', 'Markdown file']) {
     const overrideEnv = boot()
@@ -618,7 +651,7 @@ function openFileTab(env, itemLabel, path) {
   assert.equal(env2.findAll(panel2, 'rsb-tab').length, 3, 'all three file presentation types must survive a reload')
   await tick()
   const panel3 = env2.findClass(env2.render(startedProps), 'rsb-bottom-panel')
-  const text = env2.findClass(panel3, 'rsb-text-preview')
+  const text = env2.findClass(panel3, 'rsb-fp-line')
   assert.ok(text, 'the restored active tab must render its Text Preview')
   assert.deepEqual(
     env2.remoteCalls.map((c) => c.args),
@@ -713,7 +746,7 @@ function openFileTab(env, itemLabel, path) {
   panel = openPanel(env2)
   await tick()
   panel = env2.findClass(env2.render(startedProps), 'rsb-bottom-panel')
-  assert.ok(env2.findClass(panel, 'rsb-text-preview'), 'the explicit Text Preview must survive a page reload')
+  assert.ok(env2.findClass(panel, 'rsb-fp-line'), 'the explicit Text Preview must survive a page reload')
   assert.deepEqual(
     JSON.parse(env2.storage.get(key)).tabs.map((tab) => tab.type),
     ['html-file', 'text-file'],

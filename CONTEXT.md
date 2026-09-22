@@ -85,14 +85,25 @@ The safe source-text presentation for a File Preview. It preserves the file's
 line structure and whitespace without interpreting the content as HTML or
 Markdown. When the file extension names a programming language, the Text
 Preview colours the source for that language; otherwise it stays plain. A file
-that is neither HTML nor Markdown uses this presentation by default.
+that is neither HTML nor Markdown uses this presentation by default. One row
+carries one source line with its own number in the gutter, so a wrapped line
+keeps its number beside it. A toolbar row carries the path, a copy control, a
+wrap toggle, and a hint at the browser's own find. At most 512 KB is coloured:
+a larger file renders plain and the toolbar says so. When a caller reports a
+line — a chip on the Files Changed Row does — the Text Preview marks that row
+and brings it into view. A rendered HTML Preview or Markdown Preview has no
+source row to mark, so it opens unmarked.
 
 ## Diff Preview
 
 The change presentation for a File Preview. It shows one unified change between
 the file as the last commit holds it and the file as the working repository
-holds it now. Git considers an untracked file to have no change, so that file
-opens as a Text Preview instead.
+holds it now, as rows that carry the old number, the new number, and the
+`-`/`+`/space marker. A Source Control file name and the Panel picker both ask
+for it, and one path has one Diff Preview whatever mix of staged and unstaged
+change it holds. Git considers an untracked file to have no change, so a diff
+for such a file shows the Text Preview instead, under the same tab type and
+identity.
 
 ## Sidebar Settings
 
@@ -162,7 +173,8 @@ explicitly out of scope.
 The shipped surface below a conversation turn that lists the files the session
 created or changed. A chip on that row asks the shell's Rightbar to open its
 file. This plugin owns the right column, so it answers that request with a
-Panel Tab instead of a Rightbar tab.
+Panel Tab instead of a Rightbar tab (ADR 0012), and it marks the line the row
+reported.
 
 ## Commit Ref Summary
 

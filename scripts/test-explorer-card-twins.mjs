@@ -21,8 +21,8 @@ const sources = await Promise.all(
 for (const { file, source } of sources) {
   assert.match(source, /\{ id: 'explorer', title: 'Explorer', order: 30, render: ExplorerCard, headerAction: ExplorerCollapseButton \}/, file + ': the Explorer must join the Card Manifest last, visible by default, with its collapse-all head button')
   assert.match(source, /const pendingOpenStore = createStore\(\[\]\)/, file + ': the ADR 0007 pending-open store must exist at plugin scope')
-  assert.match(source, /function requestPreview\(path\) \{/, file + ': the file-select seam must be a named function')
-  assert.match(source, /pendingOpenStore\.set\(pendingOpenStore\.get\(\)\.concat\(\[\{ path: p \}\]\)\)/, file + ': a file select must enqueue one path request')
+  assert.match(source, /function requestPreview\(path, options\) \{/, file + ': the file-select seam must be a named function')
+  assert.match(source, /pendingOpenStore\.set\(pendingOpenStore\.get\(\)\.concat\(\[req\]\)\)/, file + ': a file select must enqueue one path request')
   assert.match(source, /function drainPendingOpens\(\) \{/, file + ': the Panel must own a drain for the pending-open store')
   assert.match(source, /pendingOpenStore\.set\(\[\]\)/, file + ': the drain must empty the store it read')
   assert.match(source, /return pendingOpenStore\.subscribe\(\(\) => drainPendingOpens\(\)\)/, file + ': the drain must run on mount and on every store change')
@@ -46,7 +46,7 @@ for (const { file, source } of sources) {
 {
   const { source } = sources.find((s) => s.file === 'lib/client.js')
   assert.match(source, /invocation\('listDir', \[CWD, param\('path', PathParam\)\], result\(DirListResultCodec\)\)/, 'lib/client.js: the TYPERT_REMOTE mount must carry the listDir invocation')
-  assert.match(source, /'readFile', 'listDir',/, 'lib/client.js: the git facade must expose listDir beside readFile')
+  assert.match(source, /'readFile', 'gitDiff', 'listDir',/, 'lib/client.js: the git facade must expose listDir beside readFile')
   assert.match(source, /const DirListResultCodec = codec\(`\$\{PACKAGE\}\/DirListResult`/, 'lib/client.js: the client-side codec mirror must exist')
 }
 
@@ -76,7 +76,7 @@ for (const { file, source } of hostSources) {
   assert.match(source, /async listDir\(cwdArg, pathArg\) \{/, 'lib/index.js: the controller must expose listDir beside readFile')
   const remote = await readFile(new URL('../lib/remote.js', import.meta.url), 'utf8')
   assert.match(remote, /invocation\('listDir', \[CWD, param\('path', PathParam\)\], result\(DirListResultCodec\)\)/, 'lib/remote.js: the host manifest must declare the listDir invocation')
-  assert.match(remote, /'readFile', 'listDir',/, 'lib/remote.js: the gateway must mark listDir as a client-mounted method')
+  assert.match(remote, /'readFile', 'gitDiff', 'listDir',/, 'lib/remote.js: the gateway must mark listDir as a client-mounted method')
 }
 {
   const { source } = hostSources.find((s) => s.file === 'dynamic/host.js')

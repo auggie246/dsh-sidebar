@@ -6,6 +6,36 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A Diff Preview Panel Tab (issue #27): one unified change against `HEAD`,
+  rendered as rows that carry the old number, the new number, and the
+  `-`/`+`/space marker. It opens from a Source Control file name and from the
+  Panel `+` picker, and a staged plus an unstaged change to one path share the
+  one tab. A new `gitDiff` host method serves it on `readFile`'s sandboxed and
+  confined path, with `--no-color` and the same 2 MB cap.
+- The Text Preview now colours source (issue #27): a vendored Prism build with
+  20 common languages is inlined into both client twins by
+  `npm run sync:vendor`, beside the vendored xterm. Files up to 512 KB are
+  coloured; larger files render plain. A toolbar row carries the path, a copy
+  control, a wrap toggle, and a hint at the browser's own find, and every
+  source line has its own number in the gutter.
+- A chip on the Files Changed Row now opens a Panel Tab (issue #27). That row
+  called `ctx.sidebarRight.openResource`, which fed the shipped Rightbar tab
+  type that this plugin's `rightbar` seat shadows, so a click showed nothing.
+  The plugin wraps that service method on the instance (ADR 0012), routes a
+  file address into the ADR 0007 pending-open store, and never calls the
+  original, so the shell column cannot expand. Any other address keeps the
+  shipped behaviour, and a dispose restores the original method.
+- A chip that reports a line marks that row in the Text Preview and brings it
+  into view.
+
+### Changed
+
+- A Diff Preview for a file with no change against `HEAD` — an untracked file,
+  or one whose change was just reverted — shows the Text Preview under the same
+  tab type and identity, rather than an empty frame.
+
 ### Fixed
 
 - Exactly one right-region control set on DSH 0.1.5 (issue #26): the shipped
