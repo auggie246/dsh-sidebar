@@ -4,8 +4,9 @@
 // two-button bar with currentColor glyphs, whose in-session Header Toggles
 // register on the session-header utilities row, with no `»` header collapse
 // control, and the inert Panel button title.
-const baseUrl = process.env.DSH_WEB_URL ?? 'http://127.0.0.1:3080'
-const response = await fetch(baseUrl)
+import { baseUrl, liveFetch } from './live-auth.mjs'
+
+const response = await liveFetch('/')
 const html = await response.text()
 if (!response.ok) {
   console.error(`Rail button bar check FAILED: ${baseUrl} returned HTTP ${response.status}`)
@@ -41,7 +42,7 @@ if (!sidebar?.url) {
   console.error('Rail button bar check FAILED: dsh-sidebar is absent from the boot manifest.')
   process.exit(1)
 }
-const bundleResponse = await fetch(new URL(sidebar.url, baseUrl))
+const bundleResponse = await liveFetch(sidebar.url)
 const bundle = await bundleResponse.text()
 if (!bundleResponse.ok) {
   console.error('Rail button bar check FAILED: the advertised browser bundle is unavailable.')

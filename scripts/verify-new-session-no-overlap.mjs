@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const baseUrl = process.env.DSH_WEB_URL ?? 'http://127.0.0.1:3080'
+import { authorizeBrowser, baseUrl } from './live-auth.mjs'
 const chromeBin = process.env.DSH_SIDEBAR_CHROME
   ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const viewport = process.env.DSH_SIDEBAR_VIEWPORT ?? '1440,900'
@@ -161,6 +161,7 @@ async function main() {
 
     const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' })
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true })
+    await authorizeBrowser(cdp, sessionId)
     console.log('connected to Chrome; loading the GUI…')
     await cdp.send('Page.enable', {}, sessionId)
     await cdp.send('Page.navigate', { url: baseUrl }, sessionId)

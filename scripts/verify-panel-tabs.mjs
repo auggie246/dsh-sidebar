@@ -11,7 +11,7 @@
 //
 // Exit 0 = every check passed. Exit 1 = any check failed.
 
-const baseUrl = process.env.DSH_WEB_URL ?? 'http://127.0.0.1:3080'
+import { authorizeBrowser, baseUrl, liveFetch } from './live-auth.mjs'
 const chromeBin = process.env.DSH_SIDEBAR_CHROME
   ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const viewport = { width: 1440, height: 900 }
@@ -38,7 +38,7 @@ console.log(`preview server on ${previewUrl}`)
 
 // ---------- served-bundle markers (the GUI must advertise the new code) ----------
 async function bundleMarkers() {
-  const response = await fetch(baseUrl)
+  const response = await liveFetch('/')
   const html = await response.text()
   if (!response.ok) throw new Error(`${baseUrl} returned HTTP ${response.status}`)
   const at = html.indexOf('__DSH_BOOT__')
@@ -52,7 +52,7 @@ async function bundleMarkers() {
   const boot = JSON.parse(html.slice(open, end))
   const entry = boot.entries?.find((e) => e.id === 'dsh-sidebar')
   if (!entry?.url) throw new Error('dsh-sidebar is absent from the boot manifest')
-  const bundleResponse = await fetch(new URL(entry.url, baseUrl))
+  const bundleResponse = await liveFetch(entry.url)
   const bundle = await bundleResponse.text()
   if (!bundleResponse.ok) throw new Error('the advertised browser bundle is unavailable')
   const checks = [
@@ -205,6 +205,7 @@ async function main() {
     const cdp = new Cdp(ws)
     const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' })
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true })
+    await authorizeBrowser(cdp, sessionId)
     console.log('connected to Chrome; loading the GUI…')
     // Iframe contexts are needed later to prove the preview's script ran.
     await cdp.send('Runtime.enable', {}, sessionId)

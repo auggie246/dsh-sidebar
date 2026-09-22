@@ -8,7 +8,7 @@
 //
 // Run this AFTER reinstalling the plugin and restarting `dsh web`.
 // Exits 0 on success, 1 with a clear message on failure.
-const baseUrl = process.env.DSH_WEB_URL ?? 'http://127.0.0.1:3080'
+import { baseUrl, liveFetch } from './live-auth.mjs'
 const MARKER = 'rsb-verify-42'
 let rpcCounter = 0
 let ptyId = null
@@ -23,7 +23,7 @@ async function rawInvoke(method, args) {
   const rpcId = `verify-pty-${++rpcCounter}`
   let response
   try {
-    response = await fetch(`${baseUrl}/api/${endpoint}`, {
+    response = await liveFetch(`/api/${endpoint}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ type: 'client-request', rpcId, method: endpoint, payload: { args } }),

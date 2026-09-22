@@ -29,6 +29,13 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
   shipped behaviour, and a dispose restores the original method.
 - A chip that reports a line marks that row in the Text Preview and brings it
   into view.
+- `scripts/live-auth.mjs` gives the live GUI checks the browser session they
+  need. Every `dsh web` process prints one root URL carrying a random launch
+  token, and the checks cannot read it, so they now take `DSH_WEB_TOKEN` and
+  trade it for the session cookie, or take `DSH_WEB_COOKIE` directly.
+  `scripts/test-live-auth.mjs` guards that contract against a fixture server
+  that reproduces the token exchange and the 401, and it is wired into
+  `npm test`.
 
 ### Changed
 
@@ -38,6 +45,13 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ### Fixed
 
+- The `scripts/verify-*.mjs` live checks reach the running GUI again. Each
+  passed the root document request with no credential and stopped at the GUI's
+  401, because none of them carried the browser session `dsh web` mints at
+  start-up. Nine checks are affected. Every request they make now carries that
+  session, so they no longer depend on which asset routes the GUI leaves public:
+  the three plain-HTTP checks send the cookie themselves, and the six
+  Chrome-driven ones set it in the browser before they navigate.
 - `scripts/verify-web-profile-install.mjs` reads the sidebar composition row
   from the package's own bundle patch, which is where DSH applies it, instead of
   requiring it in the profile's `cordis.patch.yml`. It also fails when the row

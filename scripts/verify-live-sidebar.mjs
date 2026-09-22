@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-const baseUrl = process.env.DSH_WEB_URL ?? 'http://127.0.0.1:3080';
-const response = await fetch(baseUrl);
+import { baseUrl, liveFetch } from './live-auth.mjs';
+
+const response = await liveFetch('/');
 const html = await response.text();
 
 if (!response.ok) {
@@ -47,7 +48,7 @@ if (!sidebar?.url) {
   process.exit(1);
 }
 
-const bundleResponse = await fetch(new URL(sidebar.url, baseUrl));
+const bundleResponse = await liveFetch(sidebar.url);
 const bundle = await bundleResponse.text();
 if (!bundleResponse.ok || !bundle.includes("id: 'dsh-sidebar'")) {
   console.error('DSH Sidebar live check FAILED: the advertised browser bundle is unavailable or invalid.');
