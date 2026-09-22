@@ -73,18 +73,26 @@ belongs to the shipped Rightbar.
 ## File Preview
 
 A read-only Panel Tab that displays one file from the current workspace. A File
-Preview has one explicit presentation type: HTML Preview, Markdown Preview, or
-Text Preview. The Explorer chooses that type from the file extension. The Panel
-picker lets the user choose it directly. Legacy saved Panel state without
-`schema: 1` migrates once by the Explorer rules. Marked state keeps its saved
-presentation authoritative.
+Preview has one explicit presentation type: HTML Preview, Markdown Preview,
+Text Preview, or Diff Preview. The Explorer chooses that type from the file
+extension. The Panel picker lets the user choose it directly. Legacy saved
+Panel state without `schema: 1` migrates once by the Explorer rules. Marked
+state keeps its saved presentation authoritative.
 
 ## Text Preview
 
 The safe source-text presentation for a File Preview. It preserves the file's
 line structure and whitespace without interpreting the content as HTML or
-Markdown. A file that is neither HTML nor Markdown uses this presentation by
-default.
+Markdown. When the file extension names a programming language, the Text
+Preview colours the source for that language; otherwise it stays plain. A file
+that is neither HTML nor Markdown uses this presentation by default.
+
+## Diff Preview
+
+The change presentation for a File Preview. It shows one unified change between
+the file as the last commit holds it and the file as the working repository
+holds it now. Git considers an untracked file to have no change, so that file
+opens as a Text Preview instead.
 
 ## Sidebar Settings
 
@@ -103,7 +111,8 @@ service is `openRightbar` / `closeRightbar`, the drag handle is
 owns the right column on every supported shell. On 0.1.5 the shipped Rightbar
 is a working tabbed sidebar with its own Files tree; the plugin still shadows
 its visible seat, because the shipped Rightbar cannot stack views vertically
-(ADR 0010).
+(ADR 0010). The expand control of the shipped Rightbar is not part of the
+column: it is a button in the conversation header.
 
 ## Pane
 
@@ -141,6 +150,13 @@ focuses the extension-selected tab while picker overrides stay separate. Opens
 use the pending-open store of ADR 0007. View-only means exactly that: the
 Card renders the tree and opens previews, and every mutating action is
 explicitly out of scope.
+
+## Files Changed Row
+
+The shipped surface below a conversation turn that lists the files the session
+created or changed. A chip on that row asks the shell's Rightbar to open its
+file. This plugin owns the right column, so it answers that request with a
+Panel Tab instead of a Rightbar tab.
 
 ## Commit Ref Summary
 
