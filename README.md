@@ -56,7 +56,7 @@ What you get:
 
 Cards are independent of one another: adding, removing, or hiding a Card must not affect other Cards, and future Cards join through the same Card Manifest. The Sidebar's width and the Panel's height are globally remembered region sizes that every workspace and session restores.
 
-Limitations: the Sidebar occupies DSH Web's right column (the Details Column before DSH 0.1.5, the Rightbar since). On DSH 0.1.5 the plugin's seat registration shadows the built-in right Sidebar's panel at all times, including while the Workspace Sidebar is closed. The built-in service stays live, so Chat keeps mounting and its file links still reach the service, but nothing renders the result, and the built-in Files and Documents tabs have no visible panel. If another plugin also uses the column, the lowest-priority registration wins. The Commit Graph is designed for clear everyday history browsing, not as a full Git GUI replacement.
+Limitations: the Sidebar occupies DSH Web's right column (the Details Column before DSH 0.1.5, the Rightbar since). On DSH 0.1.5 the plugin's seat registration shadows the built-in right Sidebar's panel at all times, including while the Workspace Sidebar is closed, and the plugin also shadows the built-in expand control for that panel in the session header. The only right-region controls on screen are therefore the plugin's own. The built-in service stays live, so Chat keeps mounting and its file links still reach the service, but nothing renders the result, and the built-in Files and Documents tabs have no visible panel. If another plugin also uses the column, the lowest-priority registration wins. The Commit Graph is designed for clear everyday history browsing, not as a full Git GUI replacement.
 
 ## Install
 

@@ -13,7 +13,10 @@ Working Repository, Explorer).
   plugin feature-detects the layout service face and speaks both dialects,
   so one build owns the column on every supported shell; on 0.1.5 the
   shipped right Sidebar's visible seat is shadowed while its service stays
-  live for Chat.
+  live for Chat, and the shipped expand control for that column is shadowed
+  too, in the `conversation.session.header.corner` seat (ADR 0011). While
+  the plugin's own Sidebar does not dock into the column, the plugin reports
+  the column hidden.
 - **Hero-only Rail via `shell.overlay`; in-session Header Toggles.** The
   layout owns whether the Details Column is open, so the re-entry point
   lives on the frame-wide overlay layer, pinned to the right edge. A

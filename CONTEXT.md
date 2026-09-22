@@ -112,7 +112,13 @@ owns the right column on every supported shell. On 0.1.5 the shipped Rightbar
 is a working tabbed sidebar with its own Files tree; the plugin still shadows
 its visible seat, because the shipped Rightbar cannot stack views vertically
 (ADR 0010). The expand control of the shipped Rightbar is not part of the
-column: it is a button in the conversation header.
+column: it is a button in the conversation header, in the
+`conversation.session.header.corner` seat. The plugin shadows that seat with
+an empty entry, so the shipped control never renders and exactly one
+right-region control set — ours — stays on screen (ADR 0011). The plugin
+also keeps that column shut whenever its own Sidebar does not dock into it:
+on the hero, on a blank session, and on a started session while the Sidebar
+is closed. The column is empty in all three states (ADR 0011).
 
 ## Pane
 

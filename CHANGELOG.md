@@ -6,6 +6,17 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Exactly one right-region control set on DSH 0.1.5 (issue #26): the shipped
+  Rightbar registers an expand control for its collapsed column into the
+  `conversation.session.header.corner` seat, so a fresh load showed two
+  control sets, and one click on it left an empty column open. The plugin now
+  takes that single-kind seat at priority -1 with an empty component, and it
+  keeps the shell column shut whenever the Workspace Sidebar does not dock
+  into it — the hero page, a blank session, and a started session with the
+  Sidebar closed (ADR 0011). Older shells receive no new layout call.
+
 ## [0.6.0] - 2026-09-22
 
 ### Added
