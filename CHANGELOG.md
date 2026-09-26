@@ -6,6 +6,14 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- DSH 0.1.7 support: `typert-loader` rejected the plugin with "parameter codec
+  has no create() factory". DSH 0.1.7 builds a strict codec's schema through
+  `codec.create()`; both the host manifest (`lib/remote.js`) and the client
+  mount (`lib/client.js`) now carry `create()` beside the `schema` that DSH
+  0.1.2 and 0.1.5 read.
+
 ### Added
 
 - A Diff Preview Panel Tab (issue #27): one unified change against `HEAD`,
