@@ -6,6 +6,8 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-26
+
 ### Fixed
 
 - DSH 0.1.7 support: `typert-loader` rejected the plugin with "parameter codec
