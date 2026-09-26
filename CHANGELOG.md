@@ -14,6 +14,14 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
   mount (`lib/client.js`) now carry `create()` beside the `schema` that DSH
   0.1.2 and 0.1.5 read.
 
+### Changed
+
+- Supported DeepSeek Harness releases are now 0.1.2-rc.1, 0.1.5-rc.2, and
+  0.1.7-rc.2. Support for 0.1.1-rc.2 is dropped; stay on dsh-sidebar 0.6.0
+  there. The `@deepseek-ai/dsh-typert-protocol` peer range becomes
+  `^0.1.2-rc.0 || ^0.1.5-rc.0 || ^0.1.7-rc.0`. See
+  [ADR 0013](docs/adr/0013-supported-dsh-releases-drop-011-add-017-with-dual-face-codecs.md).
+
 ### Added
 
 - A Diff Preview Panel Tab (issue #27): one unified change against `HEAD`,

@@ -61,12 +61,12 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.7 || ^0.1.1-rc.0 || ^0.1.2-rc.0 || ^0.1.5-rc.0",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.2-rc.0 || ^0.1.5-rc.0 || ^0.1.7-rc.0",
     "react": "^18.2.0"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.7 || ^0.1.1-rc.0 || ^0.1.2-rc.0 || ^0.1.5-rc.0",
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.2-rc.0 || ^0.1.5-rc.0 || ^0.1.7-rc.0",
     "react": "^18.2.0"
   }
 }
