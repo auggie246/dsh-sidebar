@@ -6,6 +6,14 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-28
+
+### Fixed
+
+- DSH 0.1.7 support: the Source Control card showed "ctx.shell.run is not a
+  function". DSH 0.1.7 removed `shell.run()`; host commands (git, file reads,
+  directory listing, discard) now run through `shell.execute(spec).result()`.
+
 ## [0.7.0] - 2026-09-26
 
 ### Fixed
