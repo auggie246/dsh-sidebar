@@ -86,7 +86,7 @@ function makeCtx(workspaceRoot) {
     },
     shell: {
       resolve(req) { return { ...req, workdir: workspaceRoot } },
-      run: async () => { throw new Error('shell.run is not available in this test') },
+      execute: async () => { throw new Error('shell.execute is not available in this test') },
     },
     typert: {},
   }

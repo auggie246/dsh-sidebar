@@ -125,6 +125,7 @@ const recordingSandbox = {
 
 function serviceCtx() {
   return {
+    sessionProjections: { register() {} },
     inject() {},
     effect() {},
     reflect: { provide() {} },
@@ -135,7 +136,7 @@ function serviceCtx() {
 const runtime = new LocalSubprocessRuntime(serviceCtx())
 const shellExecutor = new SandboxBashExecutor(
   { subprocess: runtime, sandbox: recordingSandbox, sandboxPolicy: new SandboxPolicyService(serviceCtx(), SandboxPolicyService.Config({ workspaceRoot: process.cwd() })), ...serviceCtx() },
-  { cwd: repo, timeoutMs: 120000, maxTimeoutMs: 600000, maxOutputBytes: 64 * 1024, maxSpillBytes: 64 * 1024 * 1024, graceMs: 3000 },
+  Object.fromEntries(Object.entries({ cwd: repo, timeoutMs: 120000, maxTimeoutMs: 600000, maxOutputBytes: 64 * 1024, maxSpillBytes: 64 * 1024 * 1024, graceMs: 3000 }).map(([k, v]) => [k, { get: () => v }])) // DSH 0.1.7: volatile config fields,
 )
 
 const provided = new Map()

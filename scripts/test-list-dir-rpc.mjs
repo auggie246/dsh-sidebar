@@ -111,7 +111,8 @@ function makeCtx(root) {
     logger: { info() {}, error() {} },
     shell: {
       resolve(req) { return { ...req, workdir: root } },
-      async run(req) {
+      async execute(spec) { const r = await this.fake(spec); return { result: async () => r } },
+      async fake(req) {
         policies.push(req.sandboxPolicy)
         const command = String((req && req.command) || '')
         let m = /^realpath -- '(.*)'$/.exec(command)

@@ -70,9 +70,10 @@ function makeCtx(root) {
     logger: { info() {}, error() {} },
     shell: {
       resolve(req) { return { ...req, workdir: root } },
-      run(req) {
+      async execute(req) {
         const r = spawnSync('/bin/sh', ['-c', String((req && req.command) || '')], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024 })
-        return { exitCode: r.status === null ? 1 : r.status, stdout: { text: r.stdout || '' }, stderr: { text: r.stderr || '' } }
+        const res = { exitCode: r.status === null ? 1 : r.status, stdout: { text: r.stdout || '' }, stderr: { text: r.stderr || '' } }
+        return { result: async () => res }
       },
     },
     typert: {},
