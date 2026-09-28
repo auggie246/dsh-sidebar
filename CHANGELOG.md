@@ -6,6 +6,17 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-09-28
+
+### Fixed
+
+- DSH 0.1.7 support: the Source Control card always resolved the deployment
+  workspace root (usually the user's home) instead of the current session's
+  workspace, so switching sessions never changed the repository shown and the
+  card reported "Not a git repository". DSH 0.1.7 dropped
+  `SessionListState.current`; the current session now comes from the row the
+  main view retains, with the old field still honored on older shells.
+
 ## [0.7.1] - 2026-09-28
 
 ### Fixed
