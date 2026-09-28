@@ -355,13 +355,19 @@ const PRISM = (function () {
     }
     // React writes the tracks as "<sidebar>px minmax(0, 1fr) <details>px",
     // but the CSSOM serializes the zero as "0px" (verified live:
-    // "280px minmax(0px, 1fr) 360px"), so both forms must parse; only the
-    // trailing details track is ever rewritten here, and the captured
-    // prefix preserves whichever form the browser holds. Returns true
-    // when the track needs no rewrite (already matching) or was
+    // "280px minmax(0px, 1fr) 360px"), so both forms must parse. DSH 0.1.7
+    // lifts the center track's floor to its 400px minimum and wraps the
+    // rightbar track in its own clamp, so the frame instead carries
+    // "280px minmax(400px, 1fr) minmax(0px, 864px)" — 864px being the
+    // shell's 45%-of-viewport first-open default (verified against
+    // dsh-client-ui-layout 0.1.7-rc.2). Both dialects are accepted, and
+    // every captured piece is replayed verbatim so only the trailing
+    // width changes: the plain "360px" track stays plain, and the 0.1.7
+    // "minmax(0px, 360px)" track keeps its opener and closer. Returns
+    // true when the track needs no rewrite (already matching) or was
     // rewritten, false when the frame was unreadable or the column was
     // not open.
-    const TRACKS_RE = /^(.*minmax\(0(?:px)?,\s*1fr\)\s+)(\d+(?:\.\d+)?)px\s*$/
+    const TRACKS_RE = /^(.*minmax\(\d+(?:\.\d+)?(?:px)?,\s*1fr\)\s+)((?:minmax\(0(?:px)?,\s*)?)(\d+(?:\.\d+)?)px(\)\s*)?$/
     function applyDockedWidth() {
       if (openStore.get() !== true) return false
       const frame = frameElement()
@@ -369,11 +375,11 @@ const PRISM = (function () {
           || typeof frame.style.setProperty !== 'function') return false
       const match = TRACKS_RE.exec(String(frame.style.getPropertyValue('grid-template-columns') || ''))
       if (!match) return false
-      const current = Math.round(parseFloat(match[2]))
+      const current = Math.round(parseFloat(match[3]))
       if (!(current > 0)) return false
       const width = clampPanelW(sidebarWidthStore.get())
       if (current === width) return true
-      frame.style.setProperty('grid-template-columns', match[1] + width + 'px')
+      frame.style.setProperty('grid-template-columns', match[1] + match[2] + width + 'px' + (match[4] || ''))
       return true
     }
     function scheduleDockedWidthFollow() {
@@ -414,7 +420,7 @@ const PRISM = (function () {
       if (!frame || !frame.style || typeof frame.style.getPropertyValue !== 'function') return
       const match = TRACKS_RE.exec(String(frame.style.getPropertyValue('grid-template-columns') || ''))
       if (!match) return
-      const raw = Math.round(parseFloat(match[2]))
+      const raw = Math.round(parseFloat(match[3]))
       if (!(raw >= SIDEBAR_MIN_W)) return
       const width = clampPanelW(raw)
       if (width !== sidebarWidthStore.get()) {

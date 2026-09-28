@@ -385,6 +385,44 @@ function storedState(env) {
   assert.equal(storedState(env).sidebarWidth, 500, 'the docked handle must persist its settled width')
 }
 
+// 4b. DSH 0.1.7 track dialect: the frame now writes the center floor as its
+//     400px minimum and clamps the rightbar track itself —
+//     "280px minmax(400px, 1fr) minmax(0px, 864px)", the shell's
+//     45%-of-viewport first-open default. The follow must land the remembered
+//     width inside that minmax form, and the docked handle must resize it;
+//     the 0.1.5 plain-track form keeps its own assertions above unchanged.
+{
+  const storage = new Map()
+  storage.set(PANEL_KEY, JSON.stringify({ sidebarOpen: true, panelOpen: false, panelHeight: 240, sidebarWidth: 480 }))
+  const env = boot({
+    storage,
+    deferredRaf: true,
+    frameStyle: {
+      vars: new Map([['grid-template-columns', '280px minmax(400px, 1fr) minmax(0px, 864px)']]),
+      getPropertyValue(k) { return this.vars.get(k) || '' },
+      setProperty(k, v) { this.setPropertyCalls.push([k, v]); this.vars.set(k, v) },
+      setPropertyCalls: [],
+    },
+  })
+  env.findClass(env.renderStarted(), 'rsb-rail')
+  flushFrames(env)
+  assert.equal(
+    env.frameStyle.getPropertyValue('grid-template-columns'),
+    '280px minmax(400px, 1fr) minmax(0px, 480px)',
+    'the 0.1.7 minmax track must receive the remembered width, preserving the center floor')
+  assert.equal(env.frameStyle.setPropertyCalls.length, 1, 'the 0.1.7 first-open default must be rewritten exactly once')
+  const dockedHandle = env.findClass(env.findClass(env.renderDetails(), 'rsb-docked-panel'), 'rsb-sidebar-drag')
+  assert.ok(dockedHandle, 'the docked resize line must sit on the Sidebar edge')
+  dockedHandle.props.onPointerDown(pointerEvent(720, capturingTarget([])))
+  dockedHandle.props.onPointerMove(pointerEvent(700, capturingTarget([])))
+  dockedHandle.props.onPointerUp(pointerEvent(700, capturingTarget([])))
+  assert.equal(
+    env.frameStyle.getPropertyValue('grid-template-columns'),
+    '280px minmax(400px, 1fr) minmax(0px, 500px)',
+    'the docked handle must resize the real 0.1.7 track from 480px to 500px')
+  assert.equal(storedState(env).sidebarWidth, 500, 'the 0.1.7 docked handle must persist its settled width')
+}
+
 // 5. The docked follow never rewrites a track that already matches, never
 //    touches a closed column, and stays off while the Sidebar is closed.
 {

@@ -432,6 +432,77 @@ function openSidebarStarted(env) {
   assert.equal(storedState(persist).sidebarWidth, 500, 'releasing the Details handle must still persist the settled track on older shells')
 }
 
+// 7. DSH 0.1.7 track dialect: the frame writes the center floor as its
+//    400px minimum and clamps the rightbar track itself, e.g.
+//    "280px minmax(400px, 1fr) minmax(0px, 864px)" — 864px being the shell's
+//    45%-of-viewport first-open default. The width follow, the docked drag
+//    line, and the persisted-release path must all speak that form while
+//    preserving the captured prefix verbatim.
+{
+  const storage = new Map()
+  storage.set(PANEL_KEY, JSON.stringify({ sidebarOpen: true, panelOpen: false, panelHeight: 240, sidebarWidth: 480 }))
+  const env = boot({
+    layout: 'rightbar',
+    storage,
+    deferredRaf: true,
+    frameStyle: {
+      vars: new Map([['grid-template-columns', '280px minmax(400px, 1fr) minmax(0px, 864px)']]),
+      getPropertyValue(k) { return this.vars.get(k) || '' },
+      setProperty(k, v) { this.calls.push([k, v]); this.vars.set(k, v) },
+      calls: [],
+    },
+  })
+  env.findClass(env.renderStarted(), 'rsb-rail')
+  flushFrames(env)
+  assert.equal(
+    env.frameStyle.getPropertyValue('grid-template-columns'),
+    '280px minmax(400px, 1fr) minmax(0px, 480px)',
+    'the follow must restore the remembered width inside the 0.1.7 minmax track, preserving the center floor')
+  assert.equal(env.frameStyle.calls.length, 1, 'the 0.1.7 first-open default must be rewritten exactly once')
+  // A closed 0.1.7 column ("minmax(0px, 0px)") is still never rewritten.
+  const closed = boot({
+    layout: 'rightbar',
+    storage,
+    deferredRaf: true,
+    frameStyle: {
+      vars: new Map([['grid-template-columns', '280px minmax(400px, 1fr) minmax(0px, 0px)']]),
+      getPropertyValue(k) { return this.vars.get(k) || '' },
+      setProperty() { throw new Error('must not write a closed 0.1.7 column') },
+    },
+  })
+  closed.findClass(closed.renderStarted(), 'rsb-rail')
+  flushFrames(closed)
+  // The plugin-owned docked handle must move the real 0.1.7 track, which is
+  // what "dragging the resize line does nothing" regressed to.
+  const docked = env.findClass(env.renderRightbarStarted(), 'rsb-docked-panel')
+  const dockedHandle = env.findClass(docked, 'rsb-sidebar-drag')
+  assert.ok(dockedHandle, 'the docked resize line must sit on the Sidebar edge')
+  const captureLog = []
+  const target = {
+    setPointerCapture(id) { captureLog.push(['capture', id]) },
+    releasePointerCapture(id) { captureLog.push(['release', id]) },
+  }
+  dockedHandle.props.onPointerDown({ clientX: 900, pointerId: 3, preventDefault() {}, currentTarget: target })
+  dockedHandle.props.onPointerMove({ clientX: 880, pointerId: 3, currentTarget: target })
+  dockedHandle.props.onPointerUp({ clientX: 880, pointerId: 3, currentTarget: target })
+  assert.equal(
+    env.frameStyle.getPropertyValue('grid-template-columns'),
+    '280px minmax(400px, 1fr) minmax(0px, 500px)',
+    'dragging 20px left must grow the real 0.1.7 rightbar track from 480px to 500px')
+  assert.deepEqual(captureLog, [['capture', 3], ['release', 3]], 'the docked drag must capture and release the pointer')
+  assert.equal(storedState(env).sidebarWidth, 500, 'the docked handle must persist its settled 0.1.7 width')
+  // Releasing the shell's own rightbar handle must persist the settled track
+  // through the same 0.1.7 form.
+  const persist = boot({ layout: 'rightbar', deferredRaf: true })
+  openSidebarStarted(persist)
+  flushFrames(persist) // the open follow settles on the default width first
+  persist.frameStyle.setProperty('grid-template-columns', '280px minmax(400px, 1fr) minmax(0px, 460px)')
+  fireFramePointerDown(persist, '[data-side="rightbar"]')
+  fireWindowPointerUp(persist)
+  flushFrames(persist)
+  assert.equal(storedState(persist).sidebarWidth, 460, 'releasing the rightbar handle must persist the settled 0.1.7 track')
+}
+
 // Twins parity is pinned by running this same suite against both
 // distribution forms (see the pnpm test script), not by substring checks.
 

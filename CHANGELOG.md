@@ -6,6 +6,18 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- DSH 0.1.7 support: the docked Sidebar opened at almost half the window
+  width and its resize line did nothing. DSH 0.1.7 writes the frame's grid
+  tracks as `minmax(400px, 1fr) minmax(0px, <width>px)`; the plugin's track
+  parser only understood the older `minmax(0, 1fr) <width>px` form, so the
+  remembered width was never re-applied and a drag never reached the real
+  column — the shell's 45%-of-viewport first-open default stayed in place.
+  Both track dialects are now parsed and the captured prefix is preserved,
+  so only the trailing width changes. The floating new-session Sidebar, the
+  Panel height, and the region toggles are unaffected.
+
 ## [0.7.2] - 2026-09-28
 
 ### Fixed
