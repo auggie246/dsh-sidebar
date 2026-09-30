@@ -6,6 +6,8 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-30
+
 ### Fixed
 
 - DSH 0.2.0-rc.2 refused to load the plugin because the
