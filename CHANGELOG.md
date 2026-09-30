@@ -6,6 +6,12 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- DSH 0.2.0-rc.2 refused to load the plugin because the
+  `@deepseek-ai/dsh-typert-protocol` peer range did not cover the protocol it
+  ships. The range gains `^0.2.0-rc.0`.
+
 ## [0.7.3] - 2026-09-28
 
 ### Fixed
