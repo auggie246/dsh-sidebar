@@ -134,6 +134,7 @@ for (const file of ['lib/client.js', 'dynamic/client.js']) {
   assert.match(source, /h\(GitIcon, \{ name: 'chevron' \}\)/, file + ': the dropdown affordance must be the icon-set chevron, not a text glyph')
   assert.match(source, /\.rsb-branch-btn \.rsb-icon \{ width: 16px/, file + ': the chevron must be drawn larger than the 14px action icons')
   assert.match(source, /'detached at ' \+/, file + ': a detached HEAD must read "detached at <hash>"')
+  assert.match(source, /\.rsb-branch-menu \{[^}]*background: var\(--dsw-alias-bg-layer-1\)/, file + ': the menu must use the card surface, like the Panel picker, not the lighter overlay grey')
   assert.match(source, /className: 'rsb-branch-menu'[\s\S]*role: 'listbox'/, file + ': the dropdown must be a listbox')
   assert.match(source, /disabled: busy !== ''[^\n]*rsb-branch-btn|rsb-branch-btn[^\n]*disabled: busy !== ''/, file + ': the picker must be disabled while another action is busy')
   assert.match(source, /relTime\(b\.time\)/, file + ': each row must show its short relative date')
