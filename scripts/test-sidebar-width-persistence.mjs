@@ -95,6 +95,13 @@ function boot(env = {}) {
     disconnect() { this.target = undefined }
   }
 
+  const mutationObservers = []
+  class MutationObserver {
+    constructor(callback) { this.callback = callback; mutationObservers.push(this) }
+    observe(target, options) { this.target = target; this.options = options }
+    disconnect() { this.target = undefined }
+  }
+
   const pendingFrames = []
   let nextFrame = 1
   const pendingTimers = []
@@ -126,6 +133,7 @@ function boot(env = {}) {
       documentElement,
     },
     ResizeObserver,
+    MutationObserver,
     navigator: undefined,
     localStorage,
     console,
@@ -239,6 +247,7 @@ function boot(env = {}) {
     pendingFrames,
     pendingTimers,
     resizeObservers,
+    mutationObservers,
     layoutCalls,
     frameStyle,
     detailsCol,
@@ -489,6 +498,47 @@ function storedState(env) {
   flushFrames(env)
   assert.equal(env.frameStyle.getPropertyValue('grid-template-columns'), '280px minmax(0px, 1fr) 480px', 'the follow must land the remembered width after the reopen commit')
   assert.equal(env.frameStyle.calls.length, pluginWritesBefore + 1, 'the reopen default must be rewritten exactly once')
+}
+
+// 6c. Resizing the shell's left Session Bar makes the shell rewrite the
+//     frame's grid tracks with its own transient Details width (the 0.1.7
+//     45% default or the 520px max), which used to stick until the user
+//     re-dragged the right Sidebar. The frame's style attribute is watched
+//     while docked, and any such write snaps back to the remembered width.
+{
+  const storage = new Map()
+  storage.set(PANEL_KEY, JSON.stringify({ sidebarOpen: true, panelOpen: false, panelHeight: 240, sidebarWidth: 400 }))
+  const env = boot({
+    storage,
+    deferredRaf: true,
+    frameStyle: {
+      vars: new Map([['grid-template-columns', '280px minmax(400px, 1fr) minmax(0px, 400px)']]),
+      getPropertyValue(k) { return this.vars.get(k) || '' },
+      setProperty(k, v) { this.calls.push([k, v]); this.vars.set(k, v) },
+      calls: [],
+    },
+  })
+  env.findClass(env.renderStarted(), 'rsb-rail')
+  flushFrames(env)
+  const observer = env.mutationObservers.find((o) => o.target)
+  assert.ok(observer, 'a docked Sidebar must watch the frame for track rewrites')
+  assert.equal(JSON.stringify(observer.options), JSON.stringify({ attributes: true, attributeFilter: ['style'] }), 'only the style attribute is watched')
+  const writesBefore = env.frameStyle.calls.length
+  // The shell's left-bar drag commit: new left track, wrong right track.
+  env.frameStyle.setProperty('grid-template-columns', '320px minmax(400px, 1fr) minmax(0px, 520px)')
+  observer.callback([])
+  assert.equal(
+    env.frameStyle.getPropertyValue('grid-template-columns'),
+    '320px minmax(400px, 1fr) minmax(0px, 400px)',
+    'a left Session Bar resize must keep the remembered right Sidebar width and the shell\'s new left track')
+  assert.equal(env.frameStyle.calls.length, writesBefore + 2, 'the shell write plus exactly one restore')
+  observer.callback([]) // our own write re-enters the observer
+  assert.equal(env.frameStyle.calls.length, writesBefore + 2, 'a matching track is never rewritten, so the observer cannot loop')
+  assert.equal(storedState(env).sidebarWidth, 400, 'the remembered width is untouched by the shell write')
+  // Closing the docked Sidebar stops the watch.
+  railButtons(env.findClass(env.renderTogglesStarted(), 'rsb-header-toggles'))[0].props.onClick()
+  env.findClass(env.renderStarted(), 'rsb-bottom-panel') // walk the overlay so the Rail re-runs its effect
+  assert.equal(observer.target, undefined, 'closing the Sidebar must disconnect the frame observer')
 }
 
 // 7. Malformed sidebarWidth values fall back to the 360px default.

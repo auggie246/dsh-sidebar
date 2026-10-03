@@ -6,6 +6,15 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Resizing the DSH left Session Bar no longer jumps the docked right Sidebar
+  to its maximum width in an existing session. The shell rewrites the frame's
+  grid tracks with its own Details width on every left-bar drag; the Sidebar
+  now watches the frame while docked and restores the remembered width, so
+  the right Sidebar no longer needs a re-drag. New sessions, where the
+  Sidebar floats, were never affected.
+
 ### Changed
 
 - The package description now reads "Source control, file explorer, previews
