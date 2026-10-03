@@ -6,6 +6,8 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-10-03
+
 ### Fixed
 
 - Resizing the DSH left Session Bar no longer jumps the docked right Sidebar

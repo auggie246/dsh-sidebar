@@ -1,7 +1,7 @@
 {
   "name": "dsh-sidebar",
   "description": "Source control, file explorer, previews and a terminal for DeepSeek Harness Web",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "type": "module",
   "license": "MIT",
   "author": "auggie246",
