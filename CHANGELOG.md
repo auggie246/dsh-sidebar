@@ -6,6 +6,14 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- DSH 0.2.0: clicking a file in the conversation's "Files changed" row did
+  nothing. The plugin read the `sidebarRight` service once at boot, but DSH
+  0.2.0 provides it from a plugin that loads later, so the click-through wrap
+  was never installed and the chip fell back to the blank shipped column. The
+  wrap now waits for the service through `ctx.inject`.
+
 ## [0.8.0] - 2026-09-30
 
 ### Fixed

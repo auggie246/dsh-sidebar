@@ -170,10 +170,15 @@ function boot(env = {}) {
   const sidebarRight = env.sidebarRight || new FakeSidebarRight()
   const effects = []
   const registrations = new Map()
+  // `late` models DSH 0.2.0: the service is provided by a plugin that loads
+  // after this one, so a read at boot finds nothing and the plugin must wait
+  // on ctx.inject. `provideSidebarRight()` is that later provision.
+  let provided = !env.late
+  const waiting = []
   const ctx = {
     get(name) {
       if (name === 'slots') return this.slots
-      if (name === 'sidebarRight') return sidebarRight
+      if (name === 'sidebarRight') return provided ? sidebarRight : undefined
       if (name === 'layout') {
         return {
           openDetails() {},
@@ -184,6 +189,10 @@ function boot(env = {}) {
       return undefined
     },
     remote: { $mount: async () => async () => {} },
+    ...(env.late ? { inject(names, callback) {
+      assert.equal(JSON.stringify(names), '["sidebarRight"]')
+      waiting.push(callback)
+    } } : {}),
     effect(fn) {
       const dispose = fn()
       if (typeof dispose === 'function') effects.push(dispose)
@@ -252,6 +261,10 @@ function boot(env = {}) {
     overlay,
     sidebarRight,
     effects,
+    provideSidebarRight() {
+      provided = true
+      for (const callback of waiting) callback({ sidebarRight, effect: ctx.effect.bind(ctx) })
+    },
     opened,
     calls,
     render(props) {
@@ -480,6 +493,23 @@ function markedRow(env, panel) {
   const panel = openPanel(env)
   assert.ok(panel, 'the Panel must mount without a sidebarRight service')
   assert.equal(env.opened.length, 0, 'nothing may be delegated when the service is absent')
+}
+
+// 11. DSH 0.2.0 provides sidebarRight after this plugin boots: nothing is read
+//     at boot, the wrap lands when the service arrives, and a chip click then
+//     opens a Panel Tab instead of the blank shipped column.
+{
+  const env = boot({ late: true })
+  assert.equal(Object.prototype.hasOwnProperty.call(env.sidebarRight, 'openResource'), false, 'nothing may be wrapped before the service exists')
+  env.provideSidebarRight()
+  assert.equal(Object.prototype.hasOwnProperty.call(env.sidebarRight, 'openResource'), true, 'the wrap must land once the service is provided')
+  const panel = openPanel(env)
+  assert.ok(panel, 'the Panel must mount')
+  env.sidebarRight.openResource(sessionAddress('session-a', 'notes.txt'), { params: { line: 2 } })
+  assert.equal(env.opened.length, 0, 'a file address must not reach the shipped method')
+  assert.equal(env.storage.has('dsh.rsidebar.panels.v1.session-a'), true, 'a file address must open a Panel Tab')
+  for (const dispose of env.effects) dispose()
+  assert.equal(Object.prototype.hasOwnProperty.call(env.sidebarRight, 'openResource'), false, 'a dispose must remove the late wrap again')
 }
 
 console.log('Files Changed Row bridge check passed (' + clientFile + ')')

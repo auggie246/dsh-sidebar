@@ -76,6 +76,17 @@ service, the wrapper assignment is skipped entirely (the `Object.isFrozen`
 guard), the chip quietly returns to doing nothing, and every other Card keeps
 working. The `test-files-changed-row-bridge.mjs` suite pins the frozen case.
 
+## Amendment: the service arrives after boot on DSH 0.2.0
+
+DSH 0.2.0 provides `sidebarRight` from a plugin whose own inject list
+(`layout`, `resources`, `sessions`, `uiSession`, `shortcuts`) puts it after this
+one, so a `ctx.get('sidebarRight')` at boot returned nothing and the wrap was
+silently skipped. The wrap now runs inside `ctx.inject(['sidebarRight'], …)` so
+it lands when the service is provided and is disposed with that scope. The
+plugin still does not list `sidebarRight` in its own inject list, because a
+shell without the service would then never load it; a shell without
+`ctx.inject` keeps the boot-time read.
+
 ## What was verified
 
 - The address parse for both scopes, encoded segments, a query or fragment

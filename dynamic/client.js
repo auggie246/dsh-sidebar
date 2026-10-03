@@ -275,8 +275,8 @@ const PRISM = (function () {
       const value = params ? params.line : undefined
       return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0
     }
-    const sidebarRight = ctx.get('sidebarRight')
-    if (sidebarRight && typeof sidebarRight.openResource === 'function' && !Object.isFrozen(sidebarRight)) {
+    function bridgeSidebarRight(scope, sidebarRight) {
+      if (!sidebarRight || typeof sidebarRight.openResource !== 'function' || Object.isFrozen(sidebarRight)) return
       const originalOpenResource = sidebarRight.openResource
       const ownOpenResource = Object.prototype.hasOwnProperty.call(sidebarRight, 'openResource')
       const wrapper = function (address) {
@@ -288,7 +288,7 @@ const PRISM = (function () {
         return originalOpenResource.apply(this, arguments)
       }
       sidebarRight.openResource = wrapper
-      ctx.effect(() => () => {
+      scope.effect(() => () => {
         // Restore only our own wrapper: a later wrap by another plugin stays in
         // place, and a method we found on the prototype is removed again rather
         // than frozen onto the instance.
@@ -296,6 +296,15 @@ const PRISM = (function () {
         if (ownOpenResource) sidebarRight.openResource = originalOpenResource
         else delete sidebarRight.openResource
       }, 'rside: restore sidebarRight.openResource')
+    }
+    // DSH 0.2.0 provides `sidebarRight` from a plugin that loads after this one,
+    // so a read at boot finds nothing. Wait for the service when the shell
+    // offers `ctx.inject`; do not declare it in this plugin's own inject list,
+    // or a shell without the service would never load it.
+    if (typeof ctx.inject === 'function') {
+      ctx.inject(['sidebarRight'], (scope) => bridgeSidebarRight(scope, scope.sidebarRight))
+    } else {
+      bridgeSidebarRight(ctx, ctx.get('sidebarRight'))
     }
     function viewportPanelMaxH() {
       const vh = typeof window !== 'undefined' ? window.innerHeight : undefined
