@@ -8,6 +8,8 @@ A Git sidebar for DeepSeek Harness Web.
 
 `dsh-sidebar` puts source control beside your DSH session: review changes, stage files, write commits, sync with a remote, and browse the commit graph without leaving the browser. A bottom Panel adds file preview, Markdown, diffs, and a live terminal. The sidebar automatically follows the repository in the active session's workspace and uses the Git credentials already configured on the machine running `dsh web`.
 
+Released under the [MIT license](LICENSE); release notes are in [CHANGELOG.md](CHANGELOG.md). Questions and bug reports go to [GitHub Issues](https://github.com/auggie246/dsh-sidebar/issues); to propose a change, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Table of Contents
 
 - [Security](#security)
@@ -29,8 +31,6 @@ A Git sidebar for DeepSeek Harness Web.
   - [Troubleshooting](#troubleshooting)
 - [Maintainers](#maintainers)
 - [Thanks](#thanks)
-- [Contributing](#contributing)
-- [License](#license)
 
 ## Security
 
@@ -45,11 +45,11 @@ Every git action the cards run is scoped by DSH's file sandbox to the Working Re
 What you get:
 
 - A collapsible sidebar on the right side of DSH Web
-- A bottom Panel with Panel Tabs — file preview, Markdown, diffs, and a live terminal — available as soon as a session exists
+- A bottom Panel with Panel Tabs — file preview, Markdown, diffs, a localhost URL, and a live terminal — available as soon as a session exists
 - Source control for the active session's workspace
 - A view-only file explorer over the active session's workspace (the Explorer card)
 - Staged, unstaged, untracked, and conflicting-file views
-- Stage, unstage, discard, commit, fetch, pull, and push actions
+- Stage, unstage, discard, commit, fetch, pull, and push actions, plus switching between local branches
 - A commit graph with branches, tags, remotes, merge lanes, and infinite scrolling
 - A terminal that draws Powerlevel10k prompts correctly with no Nerd Font installed: prompt icons ship embedded in the plugin and the shell runs with `TERM=xterm-256color`
 - Per-browser controls for showing or hiding cards
@@ -62,7 +62,7 @@ Limitations: the Sidebar occupies DSH Web's right column (the Details Column bef
 
 ### Compatibility
 
-`dsh-sidebar` supports DeepSeek Harness 0.1.2-rc.1, 0.1.5-rc.2, and 0.1.7-rc.2. The same install steps apply to every version. DSH 0.1.5 renamed the Details Column to Rightbar (new `rightbar` slot, `openRightbar`/`closeRightbar` layout methods, renamed frame attributes); the plugin feature-detects the layout service face at runtime and uses the matching dialect, so one build serves all supported releases with no per-version manifest change. On 0.1.5 the plugin keeps entirely out of the shipped left sidebar: it only occupies the rightbar seat it previously owned as the Details Column (ADR 0009). DSH resolves the plugin's peer dependencies by name only, and the declared `@deepseek-ai/dsh-typert-protocol` range covers all supported releases. DSH 0.1.7 builds each Typert codec's schema through a `create()` factory instead of reading `codec.schema`; the plugin's codecs carry both, so the same manifest registers on every supported release. The supported-release list and the codec contract are recorded in [ADR 0013](docs/adr/0013-supported-dsh-releases-drop-011-add-017-with-dual-face-codecs.md).
+`dsh-sidebar` supports DeepSeek Harness 0.1.2-rc.1, 0.1.5-rc.2, 0.1.7-rc.2, and 0.2.0 (including 0.2.0-rc.2). The same install steps apply to every version. DSH 0.1.5 renamed the Details Column to Rightbar (new `rightbar` slot, `openRightbar`/`closeRightbar` layout methods, renamed frame attributes); the plugin feature-detects the layout service face at runtime and uses the matching dialect, so one build serves all supported releases with no per-version manifest change. On 0.1.5 the plugin keeps entirely out of the shipped left sidebar: it only occupies the rightbar seat it previously owned as the Details Column (ADR 0009). DSH resolves the plugin's peer dependencies by name only, and the declared `@deepseek-ai/dsh-typert-protocol` range covers all supported releases, 0.2.0 included. DSH 0.1.7 builds each Typert codec's schema through a `create()` factory instead of reading `codec.schema`; the plugin's codecs carry both, so the same manifest registers on every supported release. The supported-release list and the codec contract are recorded in [ADR 0013](docs/adr/0013-supported-dsh-releases-drop-011-add-017-with-dual-face-codecs.md).
 
 ### Dependencies
 
@@ -103,7 +103,7 @@ Then complete the patch and restart steps above.
 > [!NOTE]
 > A GitHub install runs this repository's build step. If pnpm reports `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`, copy the `allowBuilds` entry from its error message into `~/.dsh/profiles/web/pnpm-workspace.yaml`, then run the same install command again. The entry is specific to the Git commit pnpm downloaded.
 
-To pin a version, append `#main`, `#v0.4.0`, or a commit SHA to the Git URL.
+To pin a version, append `#main`, `#v0.8.3`, or a commit SHA to the Git URL.
 
 ### Uninstall
 
@@ -141,13 +141,13 @@ The **Commit Graph** card displays commits from every local and remote ref. Each
 
 The Panel **+** picker lists **Terminal**, **Localhost URL**, and **File**. **File** takes a workspace path and picks the presentation from the extension, the same way the Explorer does: HTML and Markdown files render, every other file opens as Text Preview. The list scrolls when the Panel is too short to show every entry.
 
-On the first load after this upgrade, saved File Previews migrate once by extension. HTML and Markdown files keep their rendered presentations. Every other file becomes Text Preview. Tabs keep their saved presentation across Panel remounts and page reloads.
+Saved File Previews from before presentations were chosen by extension migrate once on first load. HTML and Markdown files keep their rendered presentations. Every other file becomes Text Preview. Tabs keep their saved presentation across Panel remounts and page reloads.
 
-Text Preview shows inert source text with theme colors and a monospace font. It preserves whitespace, keeps long lines unwrapped, and scrolls in both directions. One row carries one source line and its gutter number. A toolbar row carries the path, a copy control, and a wrap toggle, and a hint points at the browser's own find. Source under `512 KB` is coloured for its language — 20 common languages are vendored with Prism — and anything larger renders plain. Empty files show `File is empty.`. Files containing a NUL byte show `Binary files are not supported.` instead. The existing `2 MB` limit and read errors apply to every File Preview.
+Text Preview shows inert source text with theme colors and a monospace font. It preserves whitespace, keeps long lines unwrapped, and scrolls in both directions. One row carries one source line and its gutter number. A toolbar row carries the path, a copy control, and a wrap toggle, and a hint points at the browser's own find. Source under `512 KB` is coloured for its language — 23 common languages are vendored with Prism — and anything larger renders plain. Empty files show `File is empty.`. Files containing a NUL byte show `Binary files are not supported.` instead. The existing `2 MB` limit and read errors apply to every File Preview.
 
 Diff Preview shows one unified change against `HEAD`, with the old number, the new number, and the `-`/`+`/space marker on each row. Open it by selecting a **Source Control** file name. A staged and an unstaged change to one path share the one tab. A file with no change against `HEAD` — an untracked file, or one you just reverted — shows its Text Preview under the same tab instead.
 
-Selecting a file chip on the conversation's **Files Changed Row** opens that file as a Panel Tab. When the file opens as a Text Preview — or as a Diff Preview that falls back to one — the reported line is marked and scrolled into view. A rendered HTML or Markdown tab has no source row to mark, so it opens unmarked. The chip never opens the shipped Rightbar column.
+Selecting a file chip on the conversation's **Files Changed Row** (the "Files changed" card on DSH 0.2.0) opens that file as a Panel Tab. When the file opens as a Text Preview — or as a Diff Preview that falls back to one — the reported line is marked and scrolled into view. A rendered HTML or Markdown tab has no source row to mark, so it opens unmarked. The chip never opens the shipped Rightbar column.
 
 ### Explorer
 
@@ -164,7 +164,7 @@ Select the gear icon in the sidebar header to show or hide cards. Your choice is
 
 ### Configuration and privacy
 
-There is nothing to configure. The plugin uses your existing Git credentials and configuration on the DSH Web host. Card visibility and layout state (Sidebar open/closed and width, Panel open/closed and height) are stored only in this browser — globally, shared by every workspace — under `dsh.rsidebar.cards.v1` and `dsh.rsidebar.panel.v1`.
+There is nothing to configure. The plugin uses your existing Git credentials and configuration on the DSH Web host. Card visibility and layout state (Sidebar open/closed and width, Panel open/closed and height) are stored only in this browser — globally, shared by every workspace — under `dsh.rsidebar.cards.v1` and `dsh.rsidebar.panel.v1`. Each session's open Panel Tabs are stored in this browser too, under `dsh.rsidebar.panels.v1.<sessionId>`.
 
 ### Try it for one session
 
@@ -188,58 +188,3 @@ Want to try the sidebar without installing it permanently? The repository includ
 - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) — this plugin extends DSH Web through its Cordis plugin and slot system.
 - [xterm.js](https://xtermjs.org/) — vendored under [`lib/vendor/xterm`](lib/vendor/xterm) (MIT) and powering the Terminal Panel Tab.
 - [Prism](https://prismjs.com/) — vendored under [`lib/vendor/prism`](lib/vendor/prism) (MIT) and colouring the Text Preview.
-
-## Contributing
-
-Questions and bug reports go to [GitHub Issues](https://github.com/auggie246/dsh-sidebar/issues). Pull requests are accepted.
-
-Run the checks before proposing a change:
-
-```sh
-npm test
-```
-
-After changing `dynamic/host.js` or `dynamic/client.js`, regenerate the one-session bundle:
-
-```sh
-npm run bundle:dynamic
-```
-
-### Live GUI checks
-
-The `scripts/verify-*.mjs` checks drive the running GUI. They are not part of `npm test`, because they need a live `dsh web`.
-
-Every `dsh web` process prints one root URL that carries a random launch token:
-
-```text
-dsh web: http://127.0.0.1:3080/?token=<token>
-```
-
-`GET /?token=<token>` trades that token for a signed browser cookie, and every later request needs the cookie. The checks cannot read the token, because it lives only in that line. Pass one of these:
-
-```sh
-DSH_WEB_TOKEN=<token> node scripts/verify-live-sidebar.mjs
-DSH_WEB_COOKIE=<cookie> node scripts/verify-file-preview-tabs.mjs
-```
-
-`DSH_WEB_TOKEN` is the better input. It is what the GUI itself uses, and it works for the Chrome-driven checks, which set the cookie in the browser before they navigate. `DSH_WEB_COOKIE` suits a session whose token has scrolled away; copy the cookie value from the browser's devtools.
-
-Two more variables tune the checks:
-
-- `DSH_WEB_URL` — the GUI origin. Defaults to `http://127.0.0.1:3080`.
-- `DSH_SIDEBAR_CHROME` — the Chrome or Chromium binary. Defaults to the macOS Google Chrome path, so on Linux set it: `DSH_SIDEBAR_CHROME=/usr/bin/chromium`.
-
-Repository layout:
-
-```text
-lib/        Permanent plugin source
-dynamic/    One-session dynamic-plugin bundle
-scripts/    Bundling and verification scripts
-docs/       Design notes
-```
-
-Releases follow [Semantic Versioning](https://semver.org/), and changes are recorded in [`CHANGELOG.md`](CHANGELOG.md) in [Keep a Changelog](https://keepachangelog.com/) format. Publishing a GitHub Release triggers the npm publish workflow (`npm` trusted publishing via OIDC), so a release is the only step needed to ship a version.
-
-## License
-
-[MIT](LICENSE) © auggie246
