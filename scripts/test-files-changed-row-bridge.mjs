@@ -81,6 +81,7 @@ function boot(env = {}) {
 
   const files = env.files || DEFAULT_FILES
   const calls = []
+  const fetched = []
   const fakeRemote = {
     readFile(...args) {
       calls.push({ method: 'readFile', args })
@@ -146,6 +147,17 @@ function boot(env = {}) {
         return Promise.resolve({ ok: true })
       },
     },
+    // The summary route the shell's own Files changed card reads. `summaries`
+    // maps a seq to the JSON body; anything else answers 404.
+    fetch(url) {
+      fetched.push(String(url))
+      const seq = new URLSearchParams(String(url).split('?')[1]).get('seq')
+      const body = env.summaries && env.summaries[seq]
+      return Promise.resolve(body
+        ? { ok: true, json: () => Promise.resolve(body) }
+        : { ok: false, json: () => Promise.reject(new Error('no body')) })
+    },
+    URLSearchParams,
     console,
     Promise,
     Set,
@@ -266,6 +278,7 @@ function boot(env = {}) {
       for (const callback of waiting) callback({ sidebarRight, effect: ctx.effect.bind(ctx) })
     },
     opened,
+    fetched,
     calls,
     render(props) {
       lastPass = currentPass
@@ -510,6 +523,39 @@ function markedRow(env, panel) {
   assert.equal(env.storage.has('dsh.rsidebar.panels.v1.session-a'), true, 'a file address must open a Panel Tab')
   for (const dispose of env.effects) dispose()
   assert.equal(Object.prototype.hasOwnProperty.call(env.sidebarRight, 'openResource'), false, 'a dispose must remove the late wrap again')
+}
+
+// 12. DSH 0.2.0's Files changed row opens a turn review address, not a file
+//     address. The address carries no paths, so the summary is read from the
+//     shell's route and the clicked row's file opens as a Panel Tab.
+const reviewAddress = (id, seq, turn) => 'dsh-resource://changes-review/session/' + encodeURIComponent(id) + '/' + seq + '/' + turn
+{
+  const summaries = { 54: { turn: 1, total: 2, added: 2, deleted: 0, files: [{ path: 'docs/readme.md', display: 'docs/readme.md', added: 1, deleted: 0 }, { path: 'notes.txt', display: 'notes.txt', added: 1, deleted: 0 }] } }
+  const env = boot({ summaries })
+  const panel = await chip(env, reviewAddress('session-a', 54, 1), { params: { index: 1 } })
+  assert.equal(env.opened.length, 0, 'a review address must never reach the shipped openResource')
+  assert.equal(env.fetched.length, 1, 'the summary must be read once')
+  assert.equal(env.fetched[0], 'api/changes.summary?sessionId=session-a&seq=54', 'the summary must come from the shell route, document-relative')
+  assert.deepEqual(tabTypes(env).map((t) => [t.type, t.path]), [['text-file', 'notes.txt']], 'the clicked row must open as a Panel Tab')
+  assert.equal(activeTabs(env, panel).length, 1)
+
+  // No index (the header) opens the first file; a repeat focuses, not appends.
+  const header = boot({ summaries })
+  await chip(header, reviewAddress('session-a', 54, 1))
+  assert.deepEqual(tabTypes(header).map((t) => t.path), ['docs/readme.md'], 'the header must open the first file')
+
+  // A summary the host no longer serves, an index past the list, and a
+  // malformed address open nothing and do not reach the shipped method.
+  const gone = boot({ summaries })
+  await chip(gone, reviewAddress('session-a', 99, 1), { params: { index: 0 } })
+  await chip(gone, reviewAddress('session-a', 54, 1), { params: { index: 7 } })
+  assert.equal(gone.storage.has('dsh.rsidebar.panels.v1.session-a'), false, 'an unreadable summary or index must open no tab')
+  assert.equal(gone.opened.length, 0)
+  const bad = boot({ summaries })
+  bad.sidebarRight.openResource(reviewAddress('session-a', 'x', 1))
+  bad.sidebarRight.openResource('dsh-resource://changes-review/session/session-a/54/0')
+  assert.equal(bad.opened.length, 2, 'a malformed review address must stay with the shipped method')
+  assert.equal(bad.fetched.length, 0)
 }
 
 console.log('Files Changed Row bridge check passed (' + clientFile + ')')

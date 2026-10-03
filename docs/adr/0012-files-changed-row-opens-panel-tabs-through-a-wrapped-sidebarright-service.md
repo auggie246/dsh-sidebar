@@ -87,6 +87,22 @@ plugin still does not list `sidebarRight` in its own inject list, because a
 shell without the service would then never load it; a shell without
 `ctx.inject` keeps the boot-time read.
 
+## Amendment: DSH 0.2.0 opens a turn review, not a file
+
+On DSH 0.2.0 the "Files changed" card opens
+`dsh-resource://changes-review/session/<sessionId>/<seq>/<turn>` with
+`params.index` for the clicked row, so the file-address branch never saw it and
+the shipped call opened a blank column. The wrapper now also reads that
+address (mirroring the shell's `parseChangesReviewAddress`), fetches the turn's
+summary from the document-relative `api/changes.summary?sessionId&seq` route the
+shell's own card uses, and opens `files[index].path` (index 0 for the header) as
+a Panel Tab in the extension-chosen presentation. A summary the host no longer
+serves, an index past the list, or a failed read opens nothing; a malformed
+address still falls through to the shipped method. The Diff Preview is not used,
+because it compares against `HEAD` and a file the turn created is untracked.
+The route and summary shape are DSH's internal contract, so a future change
+there degrades to a click that does nothing.
+
 ## What was verified
 
 - The address parse for both scopes, encoded segments, a query or fragment

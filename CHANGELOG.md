@@ -6,6 +6,15 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- DSH 0.2.0: clicking a file in the conversation's "Files changed" card
+  opened a blank right column instead of the bottom Panel. The card opens a
+  turn-review address rather than a file address, which 0.8.1's wrap passed
+  through. The plugin now reads the turn's change summary from the shell's own
+  route and opens the clicked file as a Panel Tab (the header opens the first
+  file).
+
 ## [0.8.1] - 2026-10-03
 
 ### Fixed
