@@ -351,18 +351,18 @@ function openFileTab(env, itemLabel, path) {
   const next = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
   assert.ok(env.findClass(next, 'rsb-tab-picker'), 'clicking + must open the type picker')
   const items = env.findAll(next, 'rsb-tab-picker-item')
-  assert.equal(items.length, 6, 'the picker must list Localhost URL, all four file presentations, and Terminal')
+  assert.equal(items.length, 6, 'the picker must list Terminal, Localhost URL, and all four file presentations')
   const labels = items.map((item) => {
     const strings = []
     env.collectStrings(item, strings)
     return strings.join(' ')
   })
-  assert.ok(labels[0].includes('Localhost URL'), 'Localhost URL stays the first picker item')
-  assert.ok(labels[1].includes('HTML file') && labels[1].includes('Preview a repo file in an iframe'), 'the HTML file item must carry its title and sub')
-  assert.ok(labels[2].includes('Markdown file') && labels[2].includes('Render a repo Markdown file'), 'the Markdown file item must carry its title and sub')
-  assert.ok(labels[3].includes('Text file') && labels[3].includes('Preview a repo file as source text'), 'the Text file item must carry its title and sub')
-  assert.ok(labels[4].includes('Diff') && labels[4].includes('Compare one repo file with the last commit'), 'the Diff item must carry its title and sub (issue #27)')
-  assert.ok(labels[5].includes('Terminal'), 'the Terminal item from ticket #8 stays last')
+  assert.ok(labels[0].includes('Terminal'), 'Terminal is the most used type and leads the picker')
+  assert.ok(labels[1].includes('Localhost URL'), 'Localhost URL follows Terminal')
+  assert.ok(labels[2].includes('HTML file') && labels[2].includes('Preview a repo file in an iframe'), 'the HTML file item must carry its title and sub')
+  assert.ok(labels[3].includes('Markdown file') && labels[3].includes('Render a repo Markdown file'), 'the Markdown file item must carry its title and sub')
+  assert.ok(labels[4].includes('Text file') && labels[4].includes('Preview a repo file as source text'), 'the Text file item must carry its title and sub')
+  assert.ok(labels[5].includes('Diff') && labels[5].includes('Compare one repo file with the last commit'), 'the Diff item must carry its title and sub (issue #27)')
 }
 
 // 2. The HTML file flow: the form matches the URL form structure, submitting
