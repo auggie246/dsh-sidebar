@@ -336,6 +336,40 @@ return {
       return r.code === 0 ? { ok: true } : { ok: false, error: r.err || r.out || ('git ' + op + ' failed') }
     })
 
+    // Issue #28: the Branch Picker's list. The current branch leads, the rest
+    // follow newest commit first; %(HEAD) is '*' on the current branch only.
+    harness.handle('branches', async (args) => {
+      try {
+        const cwd = cwdOf(args)
+        const r = await git(cwd, "for-each-ref --sort=-committerdate '--format=%(HEAD)%09%(committerdate:unix)%09%(refname:short)' refs/heads")
+        if (r.code !== 0) return { ok: false, error: r.err || 'git branch list failed' }
+        const branches = []
+        for (const line of r.out.split('\n')) {
+          const cols = line.split('\t')
+          if (cols.length < 3 || !cols[2]) continue
+          branches.push({ name: cols.slice(2).join('\t'), type: 'branch', current: cols[0] === '*', time: parseInt(cols[1], 10) || 0 })
+        }
+        branches.sort((a, b) => (a.current === b.current ? 0 : a.current ? -1 : 1))
+        return { ok: true, branches: branches }
+      } catch (e) {
+        return { ok: false, error: String((e && e.message) || e) }
+      }
+    })
+
+    // ADR 0014: a plain switch. No stash, force or pre-check — git refuses an
+    // unsafe switch itself and its message is what the card shows. --no-guess
+    // keeps a local pick from silently creating a tracking branch.
+    harness.handle('switchBranch', async (args) => {
+      try {
+        const name = args && typeof args.name === 'string' ? args.name : ''
+        if (!name || name[0] === '-' || /[\0\n]/.test(name)) return { ok: false, error: 'invalid branch name' }
+        const r = await git(cwdOf(args), 'switch --no-guess ' + shq(name), { timeoutMs: 60000 })
+        return r.code === 0 ? { ok: true } : { ok: false, error: r.err || r.out || 'git switch failed' }
+      } catch (e) {
+        return { ok: false, error: String((e && e.message) || e) }
+      }
+    })
+
     harness.handle('ptySpawn', async (args) => {
       try {
         if (!subprocess || typeof subprocess.spawnTerminal !== 'function') return { ok: false, error: 'subprocess service unavailable' }

@@ -128,6 +128,7 @@ Use the **Source Control** card to work with the current repository:
 - Select **discard** twice to confirm that you want to throw away a file's changes. See [Security](#security) for what discard removes.
 - Enter a commit message and select **Commit**. Press <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd> to commit from the keyboard.
 - If no files are staged, committing stages all changes first—similar to VS Code's Source Control view.
+- Click the branch name to switch to another local branch. Git refuses unsafe switches (for example conflicting local changes) and the card shows its message; nothing is stashed or forced.
 - Use the sync controls to fetch, pull, or push. Pull and push require an upstream branch.
 
 The card refreshes while it is visible, so branch and working-tree state stay current.

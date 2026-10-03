@@ -6,6 +6,16 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The Source Control card's branch label is now a Branch Picker: click it to
+  list the local branches (the current one marked, newest commit first, each
+  with its age) and pick one to switch to it. A detached HEAD reads
+  "detached at <hash>". Switching is a plain `git switch`: nothing is
+  stashed, forced or pre-checked, and a refusal such as a conflicting local
+  change shows git's own message in the card's error line (ADR 0014).
+  Remote-only branches and a filter box follow in later releases.
+
 ### Changed
 
 - The Panel `+` picker now leads with Terminal and lists three entries: Terminal,

@@ -105,6 +105,18 @@ change it holds. Git considers an untracked file to have no change, so a diff
 for such a file shows the Text Preview instead, under the same tab type and
 identity.
 
+## Branch Picker
+
+The dropdown behind the branch label in the Source Control card's branch row.
+Clicking the label loads the Working Repository's local branches and lists
+them with the current one marked first, then the rest newest commit first,
+each with a short age. A detached HEAD reads "detached at <hash>" and lists no
+current branch. Picking a branch switches the Working Repository to it with a
+plain `git switch`; the card never stashes, forces or pre-checks, so a
+refusal is git's own message in the card's error line (ADR 0014). The label is
+disabled while another card action is busy. Creating, renaming and deleting
+branches are out of scope.
+
 ## Sidebar Settings
 
 The affordance inside the Sidebar where the user toggles each Card visible or

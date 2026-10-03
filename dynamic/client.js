@@ -856,6 +856,63 @@ const PRISM = (function () {
     // element to scroll into view (the vm test harness).
     const FP_ROW_H = 18
 
+    // ---------- Branch Picker (issue #28) ----------
+    // The branch label in the Source Control card's branch row. Clicking it loads
+    // the local branch list and opens a dropdown; picking a branch hands it to
+    // onPick, which runs the card's busy-guarded action. Per ADR 0014 nothing is
+    // pre-checked: a refused switch comes back through the card's error line.
+    function BranchPicker(props) {
+      const data = props.data
+      const busy = props.busy
+      const [inst] = React.useState(() => ({ seq: 0 }))
+      const [menu, setMenu] = React.useState(null)
+      const [list, setList] = React.useState(null)
+      const [listErr, setListErr] = React.useState('')
+      const label = data.detached ? 'detached at ' + data.branch : (data.branch || '(unknown)')
+
+      function close() { inst.seq++; setMenu(null) }
+      function open(e) {
+        if (menu) { close(); return }
+        const rect = e.currentTarget.getBoundingClientRect()
+        setMenu({ left: rect.left, top: rect.bottom })
+        setList(null)
+        setListErr('')
+        // A close or reopen bumps the sequence, so a slow earlier load can never
+        // overwrite the list the user is looking at.
+        const my = ++inst.seq
+        props.load().then((branches) => { if (my === inst.seq) setList(branches) }, (err) => { if (my === inst.seq) setListErr(String((err && err.message) || err)) })
+      }
+      function pick(b) {
+        close()
+        // The menu can outlive the moment the card goes busy (a commit or sync
+        // started after it opened); only the label is disabled, so guard the pick.
+        if (!b.current && busy === '') props.onPick(b)
+      }
+
+      let body
+      if (listErr) body = h('div', { className: 'rsb-branch-note' }, 'Error: ' + listErr)
+      else if (!list) body = h('div', { className: 'rsb-branch-note' }, 'Loading branches…')
+      else if (!list.length) body = h('div', { className: 'rsb-branch-note' }, 'No branches.')
+      else {
+        body = list.map((b) => h('div', {
+          key: b.name,
+          className: 'rsb-branch-row' + (b.current ? ' rsb-branch-current' : ''),
+          role: 'option',
+          'aria-selected': b.current,
+          title: b.name,
+          onClick: () => pick(b),
+        },
+        h('span', { className: 'rsb-branch-mark' }, b.current ? '✓' : ''),
+        h('span', { className: 'rsb-branch-name' }, b.name),
+        h('span', { className: 'rsb-branch-when' }, relTime(b.time))))
+      }
+
+      return h(React.Fragment, null,
+        h('button', { className: 'rsb-branch rsb-branch-btn', title: 'Switch branch', 'aria-haspopup': 'listbox', 'aria-expanded': !!menu, disabled: busy !== '', onClick: open }, '⎇ ' + label + ' ▾'),
+        menu ? h('div', { className: 'rsb-branch-bg', onClick: close },
+          h('div', { className: 'rsb-branch-menu', role: 'listbox', 'aria-label': 'Branches', style: { left: menu.left + 'px', top: (menu.top + 4) + 'px' }, onClick: (e) => e.stopPropagation() }, body)) : null)
+    }
+
     // ---------- Git Status card ----------
     function GitStatusCard() {
       const [inst] = React.useState(() => ({ seq: 0 }))
@@ -1008,7 +1065,7 @@ const PRISM = (function () {
 
       return h('div', { className: 'rsb-status' },
         h('div', { className: 'rsb-branchrow', title: data.root },
-          h('span', { className: 'rsb-branch' }, '⎇ ' + (data.branch || '(unknown)')),
+          h(BranchPicker, { data: data, busy: busy, load: async () => { const r = await host.call('branches', withCwd()); if (!r || !r.ok) throw new Error((r && r.error) || 'branches failed'); return r.branches }, onPick: (b) => act('switchBranch', { name: b.name }) }),
           (data.ahead || data.behind) ? h('span', { className: 'rsb-ab' },
             data.ahead ? '↑' + data.ahead : '',
             data.ahead && data.behind ? ' ' : '',
@@ -3029,6 +3086,17 @@ const PRISM = (function () {
       '.rsb-branchrow { display: flex; align-items: center; gap: 4px; }',
       '.rsb-rootline { font-size: 10px; color: var(--dsw-alias-label-secondary); margin-top: -4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
       '.rsb-branch { color: var(--dsw-alias-brand-primary); font-weight: 600; }',
+      '.rsb-branch-btn { border: 0; background: none; padding: 0; font: inherit; cursor: pointer; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+      '.rsb-branch-btn:disabled { cursor: default; opacity: 0.6; }',
+      '.rsb-branch-bg { position: fixed; inset: 0; z-index: 100; }',
+      '.rsb-branch-menu { position: fixed; z-index: 101; display: flex; flex-direction: column; min-width: 180px; max-width: min(300px, calc(100vw - 16px)); max-height: 240px; overflow-y: auto; padding: 4px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-overlay); box-shadow: 0 8px 28px rgba(0,0,0,0.28); font-size: 12px; }',
+      '.rsb-branch-row { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 4px; cursor: pointer; color: var(--dsw-alias-label-primary); }',
+      '.rsb-branch-row:hover { background: var(--dsw-alias-bg-layer-2); }',
+      '.rsb-branch-current { font-weight: 600; }',
+      '.rsb-branch-mark { width: 10px; flex: none; color: var(--dsw-alias-brand-primary); }',
+      '.rsb-branch-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+      '.rsb-branch-when { flex: none; font-size: 10px; color: var(--dsw-alias-label-secondary); }',
+      '.rsb-branch-note { padding: 4px 6px; color: var(--dsw-alias-label-secondary); }',
       '.rsb-ab { color: var(--dsw-alias-label-secondary); font-size: 11px; }',
       '.rsb-act { border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); border-radius: 4px; padding: 0 5px; cursor: pointer; font-size: 11px; line-height: 17px; }',
       '.rsb-icon-act { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 20px; padding: 0; }',
