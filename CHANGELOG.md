@@ -6,6 +6,8 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-10-03
+
 ### Added
 
 - The Source Control card's branch label is now a Branch Picker: click it to
