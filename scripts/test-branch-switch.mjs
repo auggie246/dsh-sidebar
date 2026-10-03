@@ -131,6 +131,8 @@ await assert.rejects(() => gateway.switchBranch(repo, ''), /invalid branch name/
 for (const file of ['lib/client.js', 'dynamic/client.js']) {
   const source = readFileSync(new URL('../' + file, import.meta.url), 'utf8')
   assert.match(source, /className: 'rsb-branch rsb-branch-btn'/, file + ': the branch label must be a button')
+  assert.match(source, /h\(GitIcon, \{ name: 'chevron' \}\)/, file + ': the dropdown affordance must be the icon-set chevron, not a text glyph')
+  assert.match(source, /\.rsb-branch-btn \.rsb-icon \{ width: 16px/, file + ': the chevron must be drawn larger than the 14px action icons')
   assert.match(source, /'detached at ' \+/, file + ': a detached HEAD must read "detached at <hash>"')
   assert.match(source, /className: 'rsb-branch-menu'[\s\S]*role: 'listbox'/, file + ': the dropdown must be a listbox')
   assert.match(source, /disabled: busy !== ''[^\n]*rsb-branch-btn|rsb-branch-btn[^\n]*disabled: busy !== ''/, file + ': the picker must be disabled while another action is busy')
@@ -248,7 +250,7 @@ await tick()
 
 const trigger = () => findNode(tree, byClass('rsb-branch-btn'))
 assert.ok(trigger(), 'the branch label must render as a button')
-assert.match(String(trigger().props.children), /⎇ main/, 'the label must show the current branch')
+assert.match(JSON.stringify(trigger().props.children), /⎇ main/, 'the label must show the current branch')
 assert.equal(findNode(tree, byClass('rsb-branch-menu')), null, 'the menu starts closed')
 
 trigger().props.onClick({ currentTarget: { getBoundingClientRect: () => ({ left: 10, bottom: 20 }) } })
@@ -274,7 +276,7 @@ rows()[1].props.onClick()
 await tick()
 assert.deepEqual(switchCalls, [['/workspace/repo', 'feature/new']], 'a pick must switch the Working Repository to that branch')
 assert.equal(findNode(tree, byClass('rsb-branch-menu')), null, 'the menu closes on a pick')
-assert.match(String(trigger().props.children), /⎇ feature\/new/, 'the label must follow the switch (status refresh)')
+assert.match(JSON.stringify(trigger().props.children), /⎇ feature\/new/, 'the label must follow the switch (status refresh)')
 
 // A refusal lands in the card's dismissible error line; the picker re-enables.
 switchResponse = { ok: false, error: { message: 'error: Your local changes would be overwritten by checkout' } }
@@ -322,6 +324,6 @@ assert.equal(trigger().props.disabled, false, 'the label re-enables when the act
 status = { ...STATUS, branch: 'abc1234', detached: true }
 for (const poll of polls) await poll()
 await tick()
-assert.match(String(trigger().props.children), /⎇ detached at abc1234/, 'a detached HEAD must read "detached at <hash>"')
+assert.match(JSON.stringify(trigger().props.children), /⎇ detached at abc1234/, 'a detached HEAD must read "detached at <hash>"')
 
 console.log('branch switch check passed')

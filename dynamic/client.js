@@ -807,6 +807,7 @@ const PRISM = (function () {
         pull: ['M8 2v11', 'm4.5 9.5L8 13l3.5-3.5'],
         push: ['M8 14V3', 'm4.5 6.5L8 3l3.5 3.5'],
         refresh: ['M13.5 6A5.5 5.5 0 1 0 13 11', 'M13.5 2.5V6H10'],
+        chevron: ['m3.5 6 4.5 4.5L12.5 6'],
         collapse: [
           { d: 'M14 4.27051C14.5999 4.62053 15 5.26009 15 6V11C15 13.21 13.21 15 11 15H6C5.26009 15 4.62053 14.5999 4.27051 14H11C12.65 14 14 12.65 14 11V4.27051Z', fill: 'currentColor', stroke: 'none' },
           { d: 'M9.5 7C9.776 7 10 7.224 10 7.5C10 7.776 9.776 8 9.5 8H5.5C5.224 8 5 7.776 5 7.5C5 7.224 5.224 7 5.5 7H9.5Z', fill: 'currentColor', stroke: 'none' },
@@ -908,7 +909,7 @@ const PRISM = (function () {
       }
 
       return h(React.Fragment, null,
-        h('button', { className: 'rsb-branch rsb-branch-btn', title: 'Switch branch', 'aria-haspopup': 'listbox', 'aria-expanded': !!menu, disabled: busy !== '', onClick: open }, '⎇ ' + label + ' ▾'),
+        h('button', { className: 'rsb-branch rsb-branch-btn', title: 'Switch branch', 'aria-haspopup': 'listbox', 'aria-expanded': !!menu, disabled: busy !== '', onClick: open }, h('span', { className: 'rsb-branch-label' }, '⎇ ' + label), h(GitIcon, { name: 'chevron' })),
         menu ? h('div', { className: 'rsb-branch-bg', onClick: close },
           h('div', { className: 'rsb-branch-menu', role: 'listbox', 'aria-label': 'Branches', style: { left: menu.left + 'px', top: (menu.top + 4) + 'px' }, onClick: (e) => e.stopPropagation() }, body)) : null)
     }
@@ -3086,7 +3087,9 @@ const PRISM = (function () {
       '.rsb-branchrow { display: flex; align-items: center; gap: 4px; }',
       '.rsb-rootline { font-size: 10px; color: var(--dsw-alias-label-secondary); margin-top: -4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
       '.rsb-branch { color: var(--dsw-alias-brand-primary); font-weight: 600; }',
-      '.rsb-branch-btn { border: 0; background: none; padding: 0; font: inherit; cursor: pointer; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+      '.rsb-branch-btn { display: inline-flex; align-items: center; gap: 2px; border: 0; background: none; padding: 0; font: inherit; cursor: pointer; min-width: 0; max-width: 100%; }',
+      '.rsb-branch-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+      '.rsb-branch-btn .rsb-icon { width: 16px; height: 16px; flex: none; }',
       '.rsb-branch-btn:disabled { cursor: default; opacity: 0.6; }',
       '.rsb-branch-bg { position: fixed; inset: 0; z-index: 100; }',
       '.rsb-branch-menu { position: fixed; z-index: 101; display: flex; flex-direction: column; min-width: 180px; max-width: min(300px, calc(100vw - 16px)); max-height: 240px; overflow-y: auto; padding: 4px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-overlay); box-shadow: 0 8px 28px rgba(0,0,0,0.28); font-size: 12px; }',
