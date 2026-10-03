@@ -295,16 +295,17 @@ function buttonWithText(env, node, text) {
 /** Open a Text Preview tab for one path and return its rendered rows. */
 async function rowsFor(clientFile, path, content) {
   const env = boot(clientFile, { [path]: content })
+  // The picker routes by extension, but this check wants Text Preview for every
+  // path (including .html and .md fixtures), so seed the text-file tab.
+  env.storage.set('dsh.rsidebar.panels.v1.session-a', JSON.stringify({
+    schema: 1,
+    tabs: [{ id: 'seeded-text', type: 'text-file', path }],
+    active: 'seeded-text',
+  }))
   const buttons = railButtons(env.findClass(env.renderToggles(props), 'rsb-header-toggles'))
   if (buttons[1].props['aria-pressed'] !== 'true') buttons[1].props.onClick()
+  env.findClass(env.render(props), 'rsb-bottom-panel') // mount pass
   let panel = env.findClass(env.render(props), 'rsb-bottom-panel')
-  env.findClass(panel, 'rsb-tabstrip-add').props.onClick()
-  panel = env.findClass(env.render(props), 'rsb-bottom-panel')
-  buttonWithText(env, panel, 'Text file').props.onClick()
-  panel = env.findClass(env.render(props), 'rsb-bottom-panel')
-  env.findClass(env.findClass(panel, 'rsb-tab-picker-form'), 'rsb-tab-picker-input').props.onChange({ target: { value: path } })
-  env.findClass(env.render(props), 'rsb-tab-picker-form').props.onSubmit({ preventDefault() {} })
-  panel = env.findClass(env.render(props), 'rsb-bottom-panel')
   await tick()
   panel = env.findClass(env.render(props), 'rsb-bottom-panel')
   const bar = env.findClass(panel, 'rsb-fp-bar')

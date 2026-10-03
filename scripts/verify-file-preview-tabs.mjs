@@ -292,7 +292,7 @@ async function main() {
     console.log('picker offers HTML file and Markdown file — OK')
 
     // 2. An HTML file renders in a script-allowed srcdoc iframe.
-    await openFileTab(cdp, sessionId, 'HTML file', HTML_FIXTURE)
+    await openFileTab(cdp, sessionId, 'File', HTML_FIXTURE)
     await waitFor(cdp, sessionId, `!!document.querySelector('.rsb-tabframe')`, 'the HTML preview iframe to mount')
     const htmlSandbox = await evaluate(cdp, sessionId, `document.querySelector('.rsb-tabframe').getAttribute('sandbox') ?? ''`)
     if (!htmlSandbox.includes('allow-scripts')) throw new Error(`the HTML preview sandbox does not allow scripts (${JSON.stringify(htmlSandbox)})`)
@@ -310,7 +310,7 @@ async function main() {
     console.log('HTML file renders in a script-allowed srcdoc iframe — OK')
 
     // 3. A Markdown file renders as styled, script-free HTML.
-    await openFileTab(cdp, sessionId, 'Markdown file', MD_FIXTURE)
+    await openFileTab(cdp, sessionId, 'File', MD_FIXTURE)
     // Only the ACTIVE tab's content renders, so after focusing the
     // markdown tab exactly one iframe exists: its title carries the path.
     await waitFor(cdp, sessionId, `(() => { const f = document.querySelector('.rsb-tabframe'); return !!f && (f.getAttribute('title') || '').includes('README') })()`, 'the Markdown preview iframe to mount')
@@ -328,7 +328,7 @@ async function main() {
     console.log('Markdown file renders as styled, script-free HTML — OK')
 
     // 4. Re-opening the same path re-focuses the existing tab.
-    await openFileTab(cdp, sessionId, 'HTML file', HTML_FIXTURE)
+    await openFileTab(cdp, sessionId, 'File', HTML_FIXTURE)
     const dedupe = await evaluate(cdp, sessionId, `({
       tabs: document.querySelectorAll('.rsb-tab').length,
       active: document.querySelector('.rsb-tab-active')?.textContent ?? '',

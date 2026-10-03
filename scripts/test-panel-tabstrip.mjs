@@ -252,6 +252,9 @@ const noSessionProps = {
 
   assert.match(env.stylesheet, /\.rsb-tabstrip \{[^}]*border-bottom: 1px solid/, 'the strip must read as a header row')
   assert.match(env.stylesheet, /\.rsb-tab-picker \{[^}]*position: absolute/, 'the type picker must float over the Panel content')
+  assert.match(env.stylesheet, /\.rsb-tab-picker \{[^}]*max-height: calc\(100% - [^}]*overflow-y: auto/, 'the type picker must scroll instead of clipping when the Panel is short')
+  assert.match(env.stylesheet, /\.rsb-tab-picker \{[^}]*background: var\(--dsw-alias-bg-layer-1\)/, 'the type picker must use the same surface as the cards')
+  assert.match(env.stylesheet, /\.rsb-tab-picker-item \{[^}]*flex-shrink: 0/, 'picker items must keep their height so the list scrolls rather than squashing')
 }
 
 // 2. ADR 0003: the Panel button is live on a blank session — a fresh

@@ -75,7 +75,7 @@ belongs to the shipped Rightbar.
 A read-only Panel Tab that displays one file from the current workspace. A File
 Preview has one explicit presentation type: HTML Preview, Markdown Preview,
 Text Preview, or Diff Preview. The Explorer chooses that type from the file
-extension. The Panel picker lets the user choose it directly. Legacy saved
+extension, and so does the Panel picker's File entry. Legacy saved
 Panel state without `schema: 1` migrates once by the Explorer rules. Marked
 state keeps its saved presentation authoritative.
 
@@ -99,7 +99,7 @@ source row to mark, so it opens unmarked.
 The change presentation for a File Preview. It shows one unified change between
 the file as the last commit holds it and the file as the working repository
 holds it now, as rows that carry the old number, the new number, and the
-`-`/`+`/space marker. A Source Control file name and the Panel picker both ask
+`-`/`+`/space marker. A Source Control file name asks
 for it, and one path has one Diff Preview whatever mix of staged and unstaged
 change it holds. Git considers an untracked file to have no change, so a diff
 for such a file shows the Text Preview instead, under the same tab type and

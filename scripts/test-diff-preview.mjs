@@ -430,6 +430,8 @@ const startedProps = {
   },
 }
 
+const TABS_KEY_BASE = 'dsh.rsidebar.panels.v1.'
+
 function railButtons(rail) {
   return (rail.props.children || []).filter((child) => child && child.type === 'button')
 }
@@ -467,21 +469,24 @@ function buttonWithText(env, node, text) {
   return found
 }
 
-/** The + → Diff → path form flow. Opens the Panel if it is closed. */
+/**
+ * The picker no longer lists Diff (the Source Control card opens it), so this seeds a diff-file tab into the stored Panel
+ * state and remounts the Panel to read it. Opens the Panel if it is closed.
+ */
+let seededDiffTabs = 0
 function openDiffViaPicker(env, path) {
-  let panel = openPanel(env)
-  // + toggles the picker, so open it only when the type list is not already
-  // showing (one caller asserts on the open list first).
-  if (!env.findClass(panel, 'rsb-tab-picker')) {
-    env.findClass(panel, 'rsb-tabstrip-add').props.onClick()
-    panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
+  const key = TABS_KEY_BASE + 'session-a'
+  const saved = JSON.parse(env.storage.get(key) || JSON.stringify({ schema: 1, tabs: [], active: null }))
+  const tab = { id: 'seeded-diff-' + (seededDiffTabs += 1), type: 'diff-file', path }
+  saved.tabs.push(tab)
+  saved.active = tab.id
+  env.storage.set(key, JSON.stringify(saved))
+  const buttons = railButtons(env.findClass(env.renderToggles(startedProps), 'rsb-header-toggles'))
+  if (buttons[1].props['aria-pressed'] === 'true') {
+    buttons[1].props.onClick()
+    env.render(startedProps) // a pass without the Panel unmounts it, so the next mount reads the seeded state
   }
-  buttonWithText(env, panel, 'Diff').props.onClick()
-  panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
-  const input = env.findClass(env.findClass(panel, 'rsb-tab-picker-form'), 'rsb-tab-picker-input')
-  input.props.onChange({ target: { value: path } })
-  env.findClass(env.render(startedProps), 'rsb-tab-picker-form').props.onSubmit({ preventDefault() {} })
-  return env.findClass(env.render(startedProps), 'rsb-bottom-panel')
+  return openPanel(env)
 }
 
 function tabTypes(env) {
@@ -507,14 +512,14 @@ function diffRows(env, panel) {
   }))
 }
 
-// 1. The Panel "+" picker offers Diff and its form creates one Diff Preview tab
-//    that loads the change through the gitDiff RPC.
+// 1. The Panel "+" picker no longer lists Diff; a stored Diff Preview tab
+//    still loads the change through the gitDiff RPC.
 {
   const env = boot()
   let panel = openPanel(env)
   env.findClass(panel, 'rsb-tabstrip-add').props.onClick()
   panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
-  assert.ok(buttonWithText(env, panel, 'Diff'), 'the picker must offer the Diff option (issue #27)')
+  assert.equal(buttonWithText(env, panel, 'Diff'), null, 'the picker must not offer Diff; the Source Control card opens it')
   openDiffViaPicker(env, 'tracked.txt')
   panel = await settle(env)
   assert.deepEqual(tabTypes(env).map((t) => [t.type, t.path]), [['diff-file', 'tracked.txt']], 'the Diff form must create one diff-file tab')
@@ -601,7 +606,7 @@ function diffRows(env, panel) {
   let panel = openPanel(env)
   env.findClass(panel, 'rsb-tabstrip-add').props.onClick()
   panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
-  buttonWithText(env, panel, 'Text file').props.onClick()
+  buttonWithText(env, panel, 'File').props.onClick()
   panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
   env.findClass(env.findClass(panel, 'rsb-tab-picker-form'), 'rsb-tab-picker-input').props.onChange({ target: { value: 'tracked.txt' } })
   env.findClass(env.render(startedProps), 'rsb-tab-picker-form').props.onSubmit({ preventDefault() {} })

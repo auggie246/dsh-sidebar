@@ -57,8 +57,8 @@ method **on the instance**:
   prototype is deleted again rather than frozen onto the instance.
 
 The Panel Tab type follows the extension exactly as the Explorer does, and the
-Diff Preview is asked for explicitly by the Source Control file name and by the
-Panel `+` picker.
+Diff Preview is asked for explicitly by the Source Control file name (the Panel `+`
+picker no longer lists it).
 
 ## Accepted risk
 

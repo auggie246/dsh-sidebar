@@ -138,13 +138,13 @@ The **Commit Graph** card displays commits from every local and remote ref. Each
 
 ### File previews
 
-Use the Panel **+** picker to open a workspace path as **HTML file**, **Markdown file**, **Text file**, or **Diff**. Each choice is explicit, so the same path can stay open under different presentations.
+The Panel **+** picker lists **Terminal**, **Localhost URL**, and **File**. **File** takes a workspace path and picks the presentation from the extension, the same way the Explorer does: HTML and Markdown files render, every other file opens as Text Preview. The list scrolls when the Panel is too short to show every entry.
 
-On the first load after this upgrade, saved File Previews migrate once by extension. HTML and Markdown files keep their rendered presentations. Every other file becomes Text Preview. Later picker choices remain unchanged across Panel remounts and page reloads.
+On the first load after this upgrade, saved File Previews migrate once by extension. HTML and Markdown files keep their rendered presentations. Every other file becomes Text Preview. Tabs keep their saved presentation across Panel remounts and page reloads.
 
 Text Preview shows inert source text with theme colors and a monospace font. It preserves whitespace, keeps long lines unwrapped, and scrolls in both directions. One row carries one source line and its gutter number. A toolbar row carries the path, a copy control, and a wrap toggle, and a hint points at the browser's own find. Source under `512 KB` is coloured for its language — 20 common languages are vendored with Prism — and anything larger renders plain. Empty files show `File is empty.`. Files containing a NUL byte show `Binary files are not supported.` instead. The existing `2 MB` limit and read errors apply to every File Preview.
 
-Diff Preview shows one unified change against `HEAD`, with the old number, the new number, and the `-`/`+`/space marker on each row. Open it by selecting a **Source Control** file name, or through the picker. A staged and an unstaged change to one path share the one tab. A file with no change against `HEAD` — an untracked file, or one you just reverted — shows its Text Preview under the same tab instead.
+Diff Preview shows one unified change against `HEAD`, with the old number, the new number, and the `-`/`+`/space marker on each row. Open it by selecting a **Source Control** file name. A staged and an unstaged change to one path share the one tab. A file with no change against `HEAD` — an untracked file, or one you just reverted — shows its Text Preview under the same tab instead.
 
 Selecting a file chip on the conversation's **Files Changed Row** opens that file as a Panel Tab. When the file opens as a Text Preview — or as a Diff Preview that falls back to one — the reported line is marked and scrolled into view. A rendered HTML or Markdown tab has no source row to mark, so it opens unmarked. The chip never opens the shipped Rightbar column.
 

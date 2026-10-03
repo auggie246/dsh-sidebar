@@ -330,16 +330,43 @@ function activeTabs(env, panel) {
 // re-renders and re-finds its node, the way React re-renders on each state
 // change. Assumes the picker starts closed. The returned panel node is the
 // mount pass: the tab exists and its content effect has just started.
-function openFileTab(env, itemLabel, path) {
+// The picker has one File entry and routes the path by extension. A
+// presentation the extension would not pick (the explicit overrides the
+// Explorer and Files changed rows can still request) is seeded into the
+// stored Panel state and the Panel is remounted to read it.
+const PRESENTATION_TYPE = { 'HTML file': 'html-file', 'Markdown file': 'markdown-file', 'Text file': 'text-file' }
+function routedType(path) {
+  if (/\.html?$/i.test(path)) return 'html-file'
+  if (/\.(md|markdown)$/i.test(path)) return 'markdown-file'
+  return 'text-file'
+}
+function openRoutedFile(env, path) {
   let panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
   env.findClass(panel, 'rsb-tabstrip-add').props.onClick()
   panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
-  env.buttonWithText(panel, itemLabel).props.onClick()
+  env.buttonWithText(panel, 'File').props.onClick()
   panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
   const input = env.findClass(env.findClass(panel, 'rsb-tab-picker-form'), 'rsb-tab-picker-input')
   input.props.onChange({ target: { value: path } })
   env.findClass(env.render(startedProps), 'rsb-tab-picker-form').props.onSubmit({ preventDefault() {} })
   return env.findClass(env.render(startedProps), 'rsb-bottom-panel')
+}
+let seededTabs = 0
+function openFileTab(env, itemLabel, path) {
+  const type = PRESENTATION_TYPE[itemLabel]
+  if (type === routedType(path)) return openRoutedFile(env, path)
+  const key = TABS_KEY_BASE + 'session-a'
+  const saved = JSON.parse(env.storage.get(key) || JSON.stringify({ schema: 1, tabs: [], active: null }))
+  let tab = saved.tabs.find((t) => t.type === type && t.path === path)
+  if (!tab) {
+    tab = { id: 'seeded-' + (seededTabs += 1), type, path }
+    saved.tabs.push(tab)
+  }
+  saved.active = tab.id
+  env.storage.set(key, JSON.stringify(saved))
+  railButtons(env.findClass(env.renderToggles(startedProps), 'rsb-header-toggles'))[1].props.onClick()
+  env.render(startedProps) // a pass without the Panel unmounts it, so the next mount reads the seeded state
+  return openPanel(env)
 }
 
 // 1. The picker offers both new types after Localhost URL, with the ticket's
@@ -351,7 +378,7 @@ function openFileTab(env, itemLabel, path) {
   const next = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
   assert.ok(env.findClass(next, 'rsb-tab-picker'), 'clicking + must open the type picker')
   const items = env.findAll(next, 'rsb-tab-picker-item')
-  assert.equal(items.length, 6, 'the picker must list Terminal, Localhost URL, and all four file presentations')
+  assert.equal(items.length, 3, 'the picker must list Terminal, Localhost URL, and File')
   const labels = items.map((item) => {
     const strings = []
     env.collectStrings(item, strings)
@@ -359,10 +386,7 @@ function openFileTab(env, itemLabel, path) {
   })
   assert.ok(labels[0].includes('Terminal'), 'Terminal is the most used type and leads the picker')
   assert.ok(labels[1].includes('Localhost URL'), 'Localhost URL follows Terminal')
-  assert.ok(labels[2].includes('HTML file') && labels[2].includes('Preview a repo file in an iframe'), 'the HTML file item must carry its title and sub')
-  assert.ok(labels[3].includes('Markdown file') && labels[3].includes('Render a repo Markdown file'), 'the Markdown file item must carry its title and sub')
-  assert.ok(labels[4].includes('Text file') && labels[4].includes('Preview a repo file as source text'), 'the Text file item must carry its title and sub')
-  assert.ok(labels[5].includes('Diff') && labels[5].includes('Compare one repo file with the last commit'), 'the Diff item must carry its title and sub (issue #27)')
+  assert.ok(labels[2].includes('File') && labels[2].includes('Preview an HTML, Markdown, or text file'), 'the File item must carry its title and sub')
 }
 
 // 2. The HTML file flow: the form matches the URL form structure, submitting
@@ -374,14 +398,14 @@ function openFileTab(env, itemLabel, path) {
   let panel = openPanel(env)
   env.findClass(panel, 'rsb-tabstrip-add').props.onClick()
   panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
-  env.buttonWithText(panel, 'HTML file').props.onClick()
+  env.buttonWithText(panel, 'File').props.onClick()
 
   panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
   const form = env.findClass(panel, 'rsb-tab-picker-form')
-  assert.ok(form, 'choosing HTML file must open the path-entry form')
+  assert.ok(form, 'choosing File must open the path-entry form')
   const headStrings = []
   env.collectStrings(env.findClass(form, 'rsb-tab-picker-head'), headStrings)
-  assert.ok(headStrings.join(' ').includes('HTML FILE'), 'the form head must read HTML FILE')
+  assert.ok(headStrings.join(' ').includes('FILE'), 'the form head must read FILE')
   const input = env.findClass(form, 'rsb-tab-picker-input')
   assert.ok(input, 'the form must hold a path input')
   assert.equal(input.props.placeholder, 'path/to/file.html', 'the input must hint at a repo-relative path')
@@ -434,13 +458,13 @@ function openFileTab(env, itemLabel, path) {
   let panel = openPanel(env)
   env.findClass(panel, 'rsb-tabstrip-add').props.onClick()
   panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
-  env.buttonWithText(panel, 'Markdown file').props.onClick()
+  env.buttonWithText(panel, 'File').props.onClick()
 
   panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
   const form = env.findClass(panel, 'rsb-tab-picker-form')
   const headStrings = []
   env.collectStrings(env.findClass(form, 'rsb-tab-picker-head'), headStrings)
-  assert.ok(headStrings.join(' ').includes('MARKDOWN FILE'), 'the Markdown form head must read MARKDOWN FILE')
+  assert.ok(headStrings.join(' ').includes('FILE'), 'the form head must read FILE')
   form.props.onSubmit({ preventDefault() {} })
 
   panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
@@ -456,7 +480,7 @@ function openFileTab(env, itemLabel, path) {
   assert.ok(env.findClass(panel, 'rsb-tab-picker'), 'Back must return to the type list')
   assert.equal(env.findClass(panel, 'rsb-tab-picker-form'), null, 'Back must close the entry form')
 
-  env.buttonWithText(panel, 'Markdown file').props.onClick()
+  env.buttonWithText(panel, 'File').props.onClick()
   panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')
   env.findClass(env.findClass(panel, 'rsb-tab-picker-form'), 'rsb-tab-picker-input').props.onKeyDown({ key: 'Escape' })
   panel = env.findClass(env.render(startedProps), 'rsb-bottom-panel')

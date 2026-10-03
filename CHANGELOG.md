@@ -6,6 +6,15 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The Panel `+` picker now leads with Terminal and lists three entries: Terminal,
+  Localhost URL, and File. File routes the path to an HTML, Markdown, or Text
+  Preview by extension. The separate HTML, Markdown, Text, and Diff entries are
+  gone; Diff still opens from a Source Control file name.
+- The picker's surface now matches the cards, and the list scrolls when the
+  Panel is shorter than the list instead of clipping its entries.
+
 ## [0.8.2] - 2026-10-03
 
 ### Fixed
