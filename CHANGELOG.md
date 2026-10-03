@@ -6,6 +6,8 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-03
+
 ### Fixed
 
 - DSH 0.2.0: clicking a file in the conversation's "Files changed" row did
