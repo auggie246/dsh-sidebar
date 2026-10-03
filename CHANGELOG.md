@@ -6,6 +6,14 @@ All notable changes to `dsh-sidebar` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The package description now reads "Source control, file explorer, previews
+  and a terminal for DeepSeek Harness Web" instead of "A Git sidebar for
+  DeepSeek Harness Web", which undersold the plugin. The README tagline and
+  the dynamic bundle manifest match. npm shows the new description from the
+  next published release.
+
 ## [0.8.3] - 2026-10-03
 
 ### Added

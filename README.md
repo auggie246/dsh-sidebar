@@ -4,7 +4,7 @@
 [![standard-readme compliant](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg)](https://github.com/RichardLitt/standard-readme)
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-A Git sidebar for DeepSeek Harness Web.
+Source control, file explorer, previews and a terminal for DeepSeek Harness Web.
 
 `dsh-sidebar` puts source control beside your DSH session: review changes, stage files, write commits, sync with a remote, and browse the commit graph without leaving the browser. A bottom Panel adds file preview, Markdown, diffs, and a live terminal. The sidebar automatically follows the repository in the active session's workspace and uses the Git credentials already configured on the machine running `dsh web`.
 

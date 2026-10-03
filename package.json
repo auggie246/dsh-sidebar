@@ -1,6 +1,6 @@
 {
   "name": "dsh-sidebar",
-  "description": "A Git sidebar for DeepSeek Harness Web",
+  "description": "Source control, file explorer, previews and a terminal for DeepSeek Harness Web",
   "version": "0.8.3",
   "type": "module",
   "license": "MIT",
